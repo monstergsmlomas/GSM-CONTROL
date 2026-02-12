@@ -1,13 +1,13 @@
 import { 
-    Users, 
     Zap, 
     ArrowDownRight, 
     BarChart3, 
     PieChart, 
     DollarSign,
-    UserPlus,   // Nuevo icono para Altas
-    UserMinus,  // Nuevo icono para Bajas
-    TrendingUp
+    UserPlus,   
+    UserMinus,  
+    TrendingUp,
+    Users // Se agrega Users importado que se usa en el componente
 } from 'lucide-react';
 import { 
     BarChart, 
@@ -22,8 +22,8 @@ import {
     CartesianGrid, 
     XAxis, 
     YAxis,
-    AreaChart,  // Nuevo gráfico
-    Area        // Nuevo componente de área
+    AreaChart,  
+    Area        
 } from 'recharts';
 import type { DashboardUser } from '../types';
 
@@ -33,27 +33,28 @@ interface MetricsPanelProps {
 
 const MetricsPanel = ({ users }: MetricsPanelProps) => {
     
-    // --- 1. ESTADÍSTICAS DINÁMICAS ---
+    // --- 1. ESTADÍSTICAS DINÁMICAS (CORREGIDO) ---
     const totalUsers = users.length;
-    const premiumUsers = users.filter((u) => u.plan === 'Premium').length;
-    const proUsers = users.filter((u) => u.plan === 'Pro').length;
+    // Ajuste a los nombres reales de los planes
+    const premiumUsers = users.filter((u) => u.plan === 'Premium AI').length;
+    const multisedeUsers = users.filter((u) => u.plan === 'Multisede').length;
     
-    // Altas del mes actual (Simulado comparando fechaAlta)
+    // Altas del mes actual
     const currentMonth = new Date().getMonth();
     const newSignups = users.filter(u => {
         const userDate = new Date(u.fechaAlta);
         return userDate.getMonth() === currentMonth;
     }).length;
 
-    // Bajas (Usuarios Inactivos)
+    // Bajas
     const churnedUsers = users.filter(u => u.estado === 'Inactivo').length;
 
-    // Cálculo de MRR (Mock)
-    const mrr = (premiumUsers * 20) + (proUsers * 10);
+    // Cálculo de MRR (Estimado según nuevos planes)
+    // Premium AI: $20, Multisede: $15, Estandar: $10 (Valores ejemplo)
+    const mrr = (premiumUsers * 20) + (multisedeUsers * 15) + (users.filter(u => u.plan === 'Estandar').length * 10);
     
     // --- 2. DATOS PARA GRÁFICOS ---
     
-    // Datos de Ingresos
     const revenueData = [
         { name: 'Ene', revenue: 4000 },
         { name: 'Feb', revenue: 3000 },
@@ -64,14 +65,20 @@ const MetricsPanel = ({ users }: MetricsPanelProps) => {
         { name: 'Jul', revenue: 3490 },
     ];
 
-    // Datos de Distribución
+    // Distribución Real de Planes
     const userDistribution = [
         { name: 'Free', value: users.filter(u => u.plan === 'Free').length },
-        { name: 'Pro', value: proUsers },
-        { name: 'Premium', value: premiumUsers },
+        { name: 'Estandar', value: users.filter(u => u.plan === 'Estandar').length },
+        { name: 'Multisede', value: multisedeUsers },
+        { name: 'Premium AI', value: premiumUsers },
     ];
 
-    // NUEVO: Datos de Altas vs Bajas (Tendencia)
+    const cycles = {
+        Mensual: users.filter(u => u.ciclo === 'Mensual' || !u.ciclo).length,
+        Semestral: users.filter(u => u.ciclo === 'Semestral').length,
+        Anual: users.filter(u => u.ciclo === 'Anual').length,
+    };
+
     const growthData = [
         { name: 'Ene', altas: 12, bajas: 2 },
         { name: 'Feb', altas: 19, bajas: 4 },
@@ -79,7 +86,7 @@ const MetricsPanel = ({ users }: MetricsPanelProps) => {
         { name: 'Abr', altas: 25, bajas: 5 },
         { name: 'May', altas: 32, bajas: 4 },
         { name: 'Jun', altas: 28, bajas: 6 },
-        { name: 'Jul', altas: newSignups > 0 ? newSignups + 20 : 35, bajas: churnedUsers > 0 ? churnedUsers + 2 : 5 }, // Proyección con datos reales
+        { name: 'Jul', altas: newSignups > 0 ? newSignups + 20 : 35, bajas: churnedUsers > 0 ? churnedUsers + 2 : 5 },
     ];
 
     return (
@@ -92,7 +99,7 @@ const MetricsPanel = ({ users }: MetricsPanelProps) => {
                 <p className="text-zinc-400 font-mono text-sm mt-1 opacity-80">{'>'} Análisis profundo del rendimiento del negocio.</p>
             </div>
 
-            {/* KPI CARDS - GRID DE 3 COLUMNAS PARA 6 TARJETAS */}
+            {/* KPI CARDS */}
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
                 
                 {/* 1. MRR */}
@@ -107,7 +114,7 @@ const MetricsPanel = ({ users }: MetricsPanelProps) => {
                     <span className="text-xs text-emerald-400 flex items-center mt-3 font-medium">+12.5% vs mes ant.</span>
                 </div>
 
-                {/* 2. NUEVAS ALTAS (NUEVO) */}
+                {/* 2. NUEVAS ALTAS */}
                 <div className="bg-zinc-900 border border-zinc-800 p-5 rounded-xl shadow-sm relative overflow-hidden group">
                     <div className="absolute right-0 top-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity"><UserPlus size={80} /></div>
                     <div className="flex justify-between items-start relative z-10">
@@ -122,7 +129,7 @@ const MetricsPanel = ({ users }: MetricsPanelProps) => {
                     </span>
                 </div>
 
-                {/* 3. BAJAS / CHURN (NUEVO) */}
+                {/* 3. BAJAS */}
                 <div className="bg-zinc-900 border border-zinc-800 p-5 rounded-xl shadow-sm relative overflow-hidden">
                     <div className="flex justify-between items-start relative z-10">
                         <div>
@@ -134,7 +141,7 @@ const MetricsPanel = ({ users }: MetricsPanelProps) => {
                     <span className="text-xs text-zinc-500 flex items-center mt-3 font-medium">Usuarios desactivados</span>
                 </div>
 
-                {/* 4. CHURN RATE % */}
+                {/* 4. CHURN RATE */}
                 <div className="bg-zinc-900 border border-zinc-800 p-5 rounded-xl shadow-sm">
                     <div className="flex justify-between items-start">
                         <div>
@@ -214,7 +221,13 @@ const MetricsPanel = ({ users }: MetricsPanelProps) => {
                                     stroke="none"
                                 >
                                     {userDistribution.map((entry, index) => (
-                                        <Cell key={`cell-${index}`} fill={index === 0 ? '#27272a' : index === 1 ? '#6366f1' : '#f59e0b'} />
+                                        // Colores: Free (Gris), Estandar (Azul), Multisede (Esmeralda), Premium AI (Oro)
+                                        <Cell key={`cell-${index}`} fill={
+                                            index === 0 ? '#71717a' : 
+                                            index === 1 ? '#3b82f6' : 
+                                            index === 2 ? '#10b981' : 
+                                            '#fbbf24'
+                                        } />
                                     ))}
                                 </Pie>
                                 <Tooltip 
@@ -228,41 +241,66 @@ const MetricsPanel = ({ users }: MetricsPanelProps) => {
                 </div>
             </div>
 
-            {/* FILA DE GRÁFICOS 2: ALTAS VS BAJAS (NUEVO) */}
-            <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6">
-                <div className="flex justify-between items-center mb-6">
-                    <h3 className="text-lg font-bold text-white flex items-center gap-2">
-                        <TrendingUp size={18} className="text-emerald-500" /> Dinámica de Crecimiento (Altas vs Bajas)
+            {/* FILA DE GRÁFICOS 2 */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                
+                {/* Distribución de Ciclos */}
+                <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6 flex flex-col justify-center">
+                    <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
+                        <DollarSign size={18} className="text-emerald-500" /> Ciclos de Facturación
                     </h3>
-                    <div className="flex gap-4 text-xs font-medium">
-                        <span className="flex items-center gap-1 text-emerald-400"><div className="w-2 h-2 rounded-full bg-emerald-500"></div> Altas</span>
-                        <span className="flex items-center gap-1 text-red-400"><div className="w-2 h-2 rounded-full bg-red-500"></div> Bajas</span>
+                    <div className="space-y-4">
+                        <div className="flex justify-between items-center p-3 bg-zinc-950/50 rounded-lg border border-zinc-800">
+                            <span className="text-zinc-400 text-sm">Mensual</span>
+                            <span className="text-white font-bold font-mono">{cycles.Mensual}</span>
+                        </div>
+                        <div className="flex justify-between items-center p-3 bg-zinc-950/50 rounded-lg border border-zinc-800">
+                            <span className="text-zinc-400 text-sm">Semestral</span>
+                            <span className="text-white font-bold font-mono">{cycles.Semestral}</span>
+                        </div>
+                        <div className="flex justify-between items-center p-3 bg-zinc-950/50 rounded-lg border border-zinc-800 relative overflow-hidden">
+                            <div className="absolute inset-0 bg-emerald-500/5"></div>
+                            <span className="text-emerald-400 text-sm font-bold">Anual (Mejor LTV)</span>
+                            <span className="text-emerald-400 font-bold font-mono">{cycles.Anual}</span>
+                        </div>
                     </div>
                 </div>
-                <div className="h-[300px]">
-                    <ResponsiveContainer width="100%" height="100%">
-                        <AreaChart data={growthData}>
-                            <defs>
-                                <linearGradient id="colorAltas" x1="0" y1="0" x2="0" y2="1">
-                                    <stop offset="5%" stopColor="#10b981" stopOpacity={0.3}/>
-                                    <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
-                                </linearGradient>
-                                <linearGradient id="colorBajas" x1="0" y1="0" x2="0" y2="1">
-                                    <stop offset="5%" stopColor="#ef4444" stopOpacity={0.3}/>
-                                    <stop offset="95%" stopColor="#ef4444" stopOpacity={0}/>
-                                </linearGradient>
-                            </defs>
-                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#27272a" />
-                            <XAxis dataKey="name" stroke="#71717a" fontSize={12} tickLine={false} axisLine={false} />
-                            <YAxis stroke="#71717a" fontSize={12} tickLine={false} axisLine={false} />
-                            <Tooltip contentStyle={{ backgroundColor: '#18181b', borderColor: '#27272a', borderRadius: '8px', color: '#fff' }} />
-                            <Area type="monotone" dataKey="altas" stroke="#10b981" fillOpacity={1} fill="url(#colorAltas)" strokeWidth={2} />
-                            <Area type="monotone" dataKey="bajas" stroke="#ef4444" fillOpacity={1} fill="url(#colorBajas)" strokeWidth={2} />
-                        </AreaChart>
-                    </ResponsiveContainer>
+
+                {/* Dinámica de Crecimiento */}
+                <div className="lg:col-span-2 bg-zinc-900 border border-zinc-800 rounded-xl p-6">
+                    <div className="flex justify-between items-center mb-6">
+                        <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                            <TrendingUp size={18} className="text-emerald-500" /> Dinámica de Crecimiento
+                        </h3>
+                        <div className="flex gap-4 text-xs font-medium">
+                            <span className="flex items-center gap-1 text-emerald-400"><div className="w-2 h-2 rounded-full bg-emerald-500"></div> Altas</span>
+                            <span className="flex items-center gap-1 text-red-400"><div className="w-2 h-2 rounded-full bg-red-500"></div> Bajas</span>
+                        </div>
+                    </div>
+                    <div className="h-[300px]">
+                        <ResponsiveContainer width="100%" height="100%">
+                            <AreaChart data={growthData}>
+                                <defs>
+                                    <linearGradient id="colorAltas" x1="0" y1="0" x2="0" y2="1">
+                                        <stop offset="5%" stopColor="#10b981" stopOpacity={0.3}/>
+                                        <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
+                                    </linearGradient>
+                                    <linearGradient id="colorBajas" x1="0" y1="0" x2="0" y2="1">
+                                        <stop offset="5%" stopColor="#ef4444" stopOpacity={0.3}/>
+                                        <stop offset="95%" stopColor="#ef4444" stopOpacity={0}/>
+                                    </linearGradient>
+                                </defs>
+                                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#27272a" />
+                                <XAxis dataKey="name" stroke="#71717a" fontSize={12} tickLine={false} axisLine={false} />
+                                <YAxis stroke="#71717a" fontSize={12} tickLine={false} axisLine={false} />
+                                <Tooltip contentStyle={{ backgroundColor: '#18181b', borderColor: '#27272a', borderRadius: '8px', color: '#fff' }} />
+                                <Area type="monotone" dataKey="altas" stroke="#10b981" fillOpacity={1} fill="url(#colorAltas)" strokeWidth={2} />
+                                <Area type="monotone" dataKey="bajas" stroke="#ef4444" fillOpacity={1} fill="url(#colorBajas)" strokeWidth={2} />
+                            </AreaChart>
+                        </ResponsiveContainer>
+                    </div>
                 </div>
             </div>
-
         </div>
     );
 };

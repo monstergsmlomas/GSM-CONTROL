@@ -31,11 +31,17 @@ interface UsuariosProps {
 
 const PlanBadge = ({ plan }: { plan: string }) => {
     const styles: any = {
-        'Premium': 'bg-amber-500/10 text-amber-500 border-amber-500/20',
-        'Pro': 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20',
+        'Premium AI': 'bg-amber-500/10 text-amber-500 border-amber-500/20 shadow-amber-500/10 shadow-[0_0_10px]',
+        'Multisede': 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20',
+        'Estandar': 'bg-blue-500/10 text-blue-400 border-blue-500/20',
         'Free': 'bg-zinc-800 text-zinc-400 border-zinc-700'
     };
-    return <span className={`px-2 py-1 rounded-full text-[10px] font-bold uppercase border ${styles[plan] || styles['Free']}`}>{plan}</span>;
+    return (
+        <span className={`px-2 py-1 rounded-full text-[10px] font-bold uppercase border flex items-center gap-1 w-fit ${styles[plan] || styles['Free']}`}>
+            {plan === 'Premium AI' && <span className="text-amber-500">✨</span>}
+            {plan}
+        </span>
+    );
 };
 
 const Usuarios = ({ users, isLoading, onRefresh, onUpdatePlan, onToggleStatus, onCyclePlan }: UsuariosProps) => {
@@ -128,7 +134,8 @@ const Usuarios = ({ users, isLoading, onRefresh, onUpdatePlan, onToggleStatus, o
 
     // Acción de WhatsApp
     const handleWhatsApp = (user: DashboardUser) => {
-        const text = `Hola ${user.nombre}, te contactamos desde Soporte GSM-FIX...`;
+        // Mensaje dinámico SaaS
+        const text = `Hola ${user.nombre}, te contactamos desde Soporte GSM-FIX para consultas sobre tu plan ${user.plan}.`;
         const url = `https://wa.me/?text=${encodeURIComponent(text)}`;
         window.open(url, '_blank');
     };
@@ -192,16 +199,16 @@ const Usuarios = ({ users, isLoading, onRefresh, onUpdatePlan, onToggleStatus, o
                 <div>
                     <h2 className="text-2xl font-bold text-white flex items-center gap-2">
                         <Users className="text-indigo-500" />
-                        Gestión de Usuarios
+                        Gestión SaaS
                     </h2>
-                    <p className="text-zinc-400 text-sm mt-1">Administra accesos y suscripciones de la plataforma.</p>
+                    <p className="text-zinc-400 text-sm mt-1">Administra accesos y planes de suscripción.</p>
                 </div>
                 <div className="flex gap-3">
                     <button className="flex items-center gap-2 px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 rounded-lg text-sm font-medium transition-colors border border-zinc-700">
                         <Download size={16} /> Exportar
                     </button>
                     <button className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm font-medium transition-colors shadow-lg shadow-indigo-900/20">
-                        <Plus size={16} /> Nuevo Usuario
+                        <Plus size={16} /> Nuevo Cliente
                     </button>
                 </div>
             </div>
@@ -212,7 +219,7 @@ const Usuarios = ({ users, isLoading, onRefresh, onUpdatePlan, onToggleStatus, o
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" size={18} />
                     <input 
                         type="text" 
-                        placeholder="Buscar por nombre, email o ID..." 
+                        placeholder="Buscar por cliente, email o ID..." 
                         className="w-full bg-zinc-950 border border-zinc-800 rounded-lg py-2 pl-10 pr-4 text-zinc-200 text-sm focus:outline-none focus:border-indigo-500 transition-colors placeholder:text-zinc-600"
                         value={searchTerm}
                         onChange={(e) => setSearchTerm(e.target.value)}
@@ -226,12 +233,11 @@ const Usuarios = ({ users, isLoading, onRefresh, onUpdatePlan, onToggleStatus, o
                             value={filterStatus}
                             onChange={(e) => setFilterStatus(e.target.value)}
                         >
-                            <option value="Todos">Todos los Usuarios</option>
-                            <option value="Nuevos">✨ Usuarios Nuevos</option>
-                            <option value="Free">🎁 Usuarios Free</option> {/* OPCIÓN AGREGADA */}
-                            <option value="Activo">✅ Usuarios Activos</option>
-                            <option value="Inactivo">🚫 Usuarios Inactivos</option>
-                            <option value="Pendiente">⏳ Pendientes</option>
+                            <option value="Todos">Todos</option>
+                            <option value="Nuevos">✨ Nuevos (30 días)</option>
+                            <option value="Free">🎁 Usuarios Free</option>
+                            <option value="Activo">✅ Activos</option>
+                            <option value="Inactivo">🚫 Inactivos</option>
                         </select>
                     </div>
                     <button onClick={onRefresh} className="p-2 hover:bg-zinc-800 rounded-lg text-zinc-400 transition-colors" title="Actualizar lista">
@@ -246,10 +252,10 @@ const Usuarios = ({ users, isLoading, onRefresh, onUpdatePlan, onToggleStatus, o
                     <table className="w-full text-left border-collapse">
                         <thead className="bg-zinc-950/50 border-b border-zinc-800">
                             <tr>
-                                <th className="px-6 py-4 text-xs font-bold text-zinc-500 uppercase tracking-wider">Usuario</th>
+                                <th className="px-6 py-4 text-xs font-bold text-zinc-500 uppercase tracking-wider">Cliente</th>
                                 <th className="px-6 py-4 text-xs font-bold text-zinc-500 uppercase tracking-wider">Estado</th>
-                                <th className="px-6 py-4 text-xs font-bold text-zinc-500 uppercase tracking-wider">Plan Actual</th>
-                                <th className="px-6 py-4 text-xs font-bold text-zinc-500 uppercase tracking-wider">Proyecto</th>
+                                <th className="px-6 py-4 text-xs font-bold text-zinc-500 uppercase tracking-wider">Plan SaaS</th>
+                                <th className="px-6 py-4 text-xs font-bold text-zinc-500 uppercase tracking-wider">Ciclo</th>
                                 <th className="px-6 py-4 text-xs font-bold text-zinc-500 uppercase tracking-wider text-right">Acciones</th>
                             </tr>
                         </thead>
@@ -285,19 +291,19 @@ const Usuarios = ({ users, isLoading, onRefresh, onUpdatePlan, onToggleStatus, o
                                     </td>
                                     <td className="px-6 py-4">
                                         <span className="text-xs font-mono text-zinc-400 bg-zinc-950 px-2 py-1 rounded border border-zinc-800">
-                                            {user.proyecto}
+                                            {user.ciclo || 'Mensual'}
                                         </span>
                                     </td>
                                     <td className="px-6 py-4 text-right">
                                         <div className="flex items-center justify-end gap-2">
                                             
-                                            {/* 1. Botón WhatsApp */}
+                                            {/* 1. Botón WhatsApp (Verde) */}
                                             <button 
                                                 onClick={() => handleWhatsApp(user)}
-                                                className="p-1.5 hover:bg-emerald-500/10 text-zinc-400 hover:text-emerald-400 rounded-lg transition-colors" 
-                                                title="Contactar por WhatsApp"
+                                                className="p-1.5 hover:bg-emerald-500/10 text-zinc-400 hover:text-emerald-500 rounded-lg transition-colors border border-transparent hover:border-emerald-500/20" 
+                                                title="WhatsApp Cliente"
                                             >
-                                                <MessageCircle size={16} />
+                                                <MessageCircle size={16} className="text-emerald-500" />
                                             </button>
 
                                             {/* 2. Botón Editar */}
@@ -326,7 +332,7 @@ const Usuarios = ({ users, isLoading, onRefresh, onUpdatePlan, onToggleStatus, o
                                             <button 
                                                 onClick={() => confirmCyclePlan(user)}
                                                 className="p-1.5 hover:bg-zinc-800 text-zinc-400 hover:text-white rounded-lg transition-colors" 
-                                                title="Cambiar Plan Rápido"
+                                                title="Rotar Plan SaaS"
                                             >
                                                 <Zap size={16} />
                                             </button>

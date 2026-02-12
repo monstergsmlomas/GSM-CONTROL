@@ -5,7 +5,7 @@ import Usuarios from './views/Usuarios';
 import ControlFlujo from './views/ControlFlujo';
 import Metricas from './views/Metricas';
 import Configuracion from './views/Configuracion';
-import type { DashboardUser, AuditLog, Partner } from './types';
+import type { DashboardUser, AuditLog, Partner, PlanGSM } from './types';
 import { MOCK_USERS, MOCK_LOGS } from './types';
 
 export default function App() {
@@ -13,16 +13,19 @@ export default function App() {
   const [sidebarOpen] = useState(true);
   const [currentView, setCurrentView] = useState('dashboard');
   
-  // Datos
+  // Datos Maestros
   const [users, setUsers] = useState<DashboardUser[]>([]);
   const [logs, setLogs] = useState<AuditLog[]>([]);
+  
+  // SOCIOS: Inicializados como Socio 1 y 2 al 50% para garantizar equidad desde el arranque
   const [partners, setPartners] = useState<Partner[]>([
-    { id: '1', name: 'Socio A', role: 'Principal', share: 50 },
-    { id: '2', name: 'Socio B', role: 'Operativo', share: 50 }
+    { id: '1', name: 'Socio 1', role: 'Socio Principal', share: 50 },
+    { id: '2', name: 'Socio 2', role: 'Socio Principal', share: 50 }
   ]);
+  
   const [isLoading, setIsLoading] = useState(true);
 
-  // Carga Inicial
+  // Carga Inicial (Simulación de Fetch)
   useEffect(() => {
     const timer = setTimeout(() => {
        setUsers(MOCK_USERS);
@@ -48,7 +51,7 @@ export default function App() {
 
   const handleUpdatePlan = ({ userId, newPlan }: { userId: string, newPlan: string }) => {
     setUsers(prev => prev.map(u => u.id === userId ? { ...u, plan: newPlan as any } : u));
-    addLog('Cambio Plan', 'Admin', `Usuario ${userId} a ${newPlan}`);
+    addLog('Cambio Plan', 'Admin', `Usuario ${userId} a ${newPlan}`, 0);
   };
 
   const handleToggleStatus = (userId: string) => {
@@ -59,17 +62,22 @@ export default function App() {
   const handleCyclePlan = (userId: string) => {
     const user = users.find(u => u.id === userId);
     if (user) {
-        const plans = ['Free', 'Pro', 'Premium'];
-        const next = plans[(plans.indexOf(user.plan as any) + 1) % 3];
+        // Orden Lógico de Ascenso: Free -> Estandar -> Multisede -> Premium AI
+        const plans: PlanGSM[] = ['Free', 'Estandar', 'Multisede', 'Premium AI'];
+        // Encuentra el índice actual y suma 1 (usando módulo % para volver al principio si llega al final)
+        const next = plans[(plans.indexOf(user.plan) + 1) % plans.length];
+        
         handleUpdatePlan({ userId, newPlan: next });
     }
   };
 
   const handleSaveConfig = (data: any) => {
+      // Sincronización: Si la configuración cambia los socios, actualizamos el estado global
       if (data.partners) {
           setPartners(data.partners);
           addLog('Configuración', 'Admin', 'Se actualizó la estructura societaria');
       }
+      // Aquí iría la lógica para guardar supabaseUrl y Key si fuera necesario en App
   };
 
   // --- RENDERIZADO DE VISTAS ---
@@ -85,11 +93,14 @@ export default function App() {
                         onCyclePlan={handleCyclePlan} 
                     />;
         case 'audit': 
+            // Pasamos 'partners' para que el cálculo de dividendos funcione
             return <ControlFlujo logs={logs} partners={partners} />;
         case 'metrics': 
             return <Metricas users={users} />;
         case 'settings': 
-            return <Configuracion onSave={handleSaveConfig} initialPartners={partners} />;
+            // Eliminamos 'initialPartners' que causaba error. 
+            // El componente Configuracion gestiona su propio estado inicial o carga de localStorage.
+            return <Configuracion onSave={handleSaveConfig} />;
         
         default: 
             return <Dashboard 

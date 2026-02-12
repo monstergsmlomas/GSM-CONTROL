@@ -1,30 +1,29 @@
 import { useState, useEffect } from 'react';
 import { 
-    Settings, Shield, Users, Save, Plus, Trash2, Key, User, 
-    CheckCircle2, Database, Edit2, X, Check, PieChart 
+    Settings, Shield, Save, Key, User, 
+    CheckCircle2, Database, Edit2, X, Check, PieChart, AlertTriangle 
 } from 'lucide-react';
+import type { Partner } from '../types';
 
 interface ConfiguracionProps {
     onSave: (data: any) => void;
+    initialPartners?: Partner[];
 }
 
-export default function Configuracion({ onSave }: ConfiguracionProps) {
+export default function Configuracion({ onSave, initialPartners }: ConfiguracionProps) {
     // --- ESTADOS ---
     const [loading, setLoading] = useState(false);
     const [success, setSuccess] = useState(false);
 
-    // Socios: Configuración inicial para 2 Socios con igualdad de condiciones
-    const [partners, setPartners] = useState([
+    // Socios: Usamos props o default, pero NO permitimos agregar/quitar
+    const [partners, setPartners] = useState<Partner[]>(initialPartners || [
         { id: '1', name: 'Socio 1', role: 'Socio Principal', share: 50 },
         { id: '2', name: 'Socio 2', role: 'Socio Principal', share: 50 }
     ]);
     
-    // Estado para agregar nuevo (por si crece el equipo en el futuro)
-    const [newPartner, setNewPartner] = useState({ name: '', share: 0 });
-
     // Estado para editar existente
     const [editingId, setEditingId] = useState<string | null>(null);
-    const [tempPartner, setTempPartner] = useState({ name: '', role: '', share: 0 });
+    const [tempPartner, setTempPartner] = useState<Partner | null>(null);
 
     // Credenciales & Supabase
     const [credentials, setCredentials] = useState({ username: 'Admin', currentPassword: '', newPassword: '' });
@@ -32,7 +31,7 @@ export default function Configuracion({ onSave }: ConfiguracionProps) {
     const [supabaseKey, setSupabaseKey] = useState('');
 
     // Cálculo del total de acciones (Validación visual)
-    const totalShares = partners.reduce((sum, p) => sum + (editingId === p.id ? 0 : p.share), 0) + (editingId ? tempPartner.share : 0);
+    const totalShares = partners.reduce((sum, p) => sum + (editingId === p.id && tempPartner ? tempPartner.share : p.share), 0);
     const isShareValid = Math.abs(totalShares - 100) < 0.1; // Tolerancia pequeña para decimales
 
     // Carga inicial de datos guardados
@@ -43,37 +42,30 @@ export default function Configuracion({ onSave }: ConfiguracionProps) {
         if (savedKey) setSupabaseKey(savedKey);
     }, []);
 
-    // --- FUNCIONES DE GESTIÓN ---
-    const handleAddPartner = () => {
-        if (!newPartner.name.trim()) return;
-        setPartners([...partners, { 
-            id: Date.now().toString(), 
-            name: newPartner.name, 
-            role: 'Socio', 
-            share: Number(newPartner.share) 
-        }]);
-        setNewPartner({ name: '', share: 0 });
-    };
-
-    const handleRemovePartner = (id: string) => setPartners(partners.filter(p => p.id !== id));
-
     // Funciones de Edición
-    const startEditing = (partner: any) => {
+    const startEditing = (partner: Partner) => {
         setEditingId(partner.id);
         setTempPartner({ ...partner });
     };
 
     const cancelEditing = () => {
         setEditingId(null);
+        setTempPartner(null);
     };
 
     const saveEditing = () => {
-        if (!tempPartner.name.trim()) return;
-        setPartners(partners.map(p => p.id === editingId ? { ...p, ...tempPartner, share: Number(tempPartner.share) } : p));
+        if (!tempPartner || !tempPartner.name.trim()) return;
+        setPartners(partners.map(p => p.id === editingId ? { ...tempPartner } : p));
         setEditingId(null);
+        setTempPartner(null);
     };
 
     const handleSaveAll = () => {
+        if (!isShareValid) {
+            alert("Error: El total de participación debe ser exactamente 100%");
+            return;
+        }
+
         setLoading(true);
         localStorage.setItem('supabase_url', supabaseUrl);
         localStorage.setItem('supabase_key', supabaseKey);
@@ -113,7 +105,8 @@ export default function Configuracion({ onSave }: ConfiguracionProps) {
                             </div>
                         </div>
                         {/* Indicador de Total % */}
-                        <div className={`px-3 py-1 rounded-full text-xs font-bold border transition-colors ${isShareValid ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'bg-red-500/10 text-red-400 border-red-500/20'}`}>
+                        <div className={`px-3 py-1 rounded-full text-xs font-bold border transition-colors flex items-center gap-2 ${isShareValid ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'bg-red-500/10 text-red-400 border-red-500/20 animate-pulse'}`}>
+                            {!isShareValid && <AlertTriangle size={12} />}
                             Total: {totalShares}%
                         </div>
                     </div>
@@ -126,7 +119,7 @@ export default function Configuracion({ onSave }: ConfiguracionProps) {
                                     {partner.name.substring(0,2).toUpperCase()}
                                 </div>
 
-                                {editingId === partner.id ? (
+                                {editingId === partner.id && tempPartner ? (
                                     // --- MODO EDICIÓN ---
                                     <div className="flex-1 flex gap-2 items-center animate-in fade-in duration-200">
                                         <div className="flex-1 space-y-1">
@@ -173,10 +166,9 @@ export default function Configuracion({ onSave }: ConfiguracionProps) {
                                             </div>
                                         </div>
 
-                                        {/* Botones de Acción */}
+                                        {/* Botones de Acción (Solo Editar) */}
                                         <div className="flex gap-1 border-l border-zinc-800 pl-2">
                                             <button onClick={() => startEditing(partner)} className="text-zinc-500 hover:text-indigo-400 p-1.5 rounded-lg hover:bg-zinc-800 transition-colors" title="Editar datos"><Edit2 size={16} /></button>
-                                            <button onClick={() => handleRemovePartner(partner.id)} className="text-zinc-500 hover:text-red-400 p-1.5 rounded-lg hover:bg-zinc-800 transition-colors" title="Eliminar socio"><Trash2 size={16} /></button>
                                         </div>
                                     </>
                                 )}
@@ -184,30 +176,8 @@ export default function Configuracion({ onSave }: ConfiguracionProps) {
                         ))}
                     </div>
 
-                    {/* Agregar Nuevo Socio */}
-                    <div className="pt-4 mt-4 border-t border-zinc-800">
-                        <p className="text-xs text-zinc-500 mb-2 font-medium uppercase">Agregar nuevo socio</p>
-                        <div className="flex gap-2">
-                            <input 
-                                className="flex-1 bg-zinc-950 border border-zinc-700 text-white text-sm rounded-lg px-3 py-2 focus:border-indigo-500 focus:outline-none transition-colors" 
-                                placeholder="Nombre..." 
-                                value={newPartner.name} 
-                                onChange={(e) => setNewPartner({...newPartner, name: e.target.value})}
-                                onKeyDown={(e) => e.key === 'Enter' && handleAddPartner()} 
-                            />
-                            <div className="relative w-24">
-                                <input 
-                                    type="number"
-                                    className="w-full bg-zinc-950 border border-zinc-700 text-white text-sm rounded-lg px-3 py-2 text-right pr-7 focus:border-indigo-500 focus:outline-none font-mono" 
-                                    placeholder="0" 
-                                    value={newPartner.share || ''} 
-                                    onChange={(e) => setNewPartner({...newPartner, share: Number(e.target.value)})}
-                                    onKeyDown={(e) => e.key === 'Enter' && handleAddPartner()} 
-                                />
-                                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 text-xs font-bold">%</span>
-                            </div>
-                            <button onClick={handleAddPartner} className="bg-zinc-800 hover:bg-zinc-700 text-white p-2 rounded-lg border border-zinc-700 transition-colors hover:border-zinc-500 shadow-sm"><Plus size={20} /></button>
-                        </div>
+                    <div className="mt-4 p-3 bg-zinc-950/50 rounded-lg border border-zinc-800 text-xs text-zinc-500 text-center">
+                        <p>Solo se permiten 2 socios principales en este plan.</p>
                     </div>
                 </div>
 

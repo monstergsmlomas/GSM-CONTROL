@@ -35,9 +35,9 @@ export default function Dashboard({ users, logs, isLoading, setCurrentView }: Da
     const totalRevenue = logs.reduce((acc, log) => acc + (log.monto || 0), 0);
     const activeUsers = users.filter(u => u.estado === 'Activo').length;
     
-    // CAMBIO APLICADO: Limitado a los últimos 3 registros
+    // Limitado a los últimos 3 registros
     const recentLogs = [...logs].sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime()).slice(0, 3);
-    const recentUsers = [...users].slice(0, 3); 
+    const recentUsers = [...users].sort((a, b) => new Date(b.fechaAlta).getTime() - new Date(a.fechaAlta).getTime()).slice(0, 3); 
 
     // Datos para gráficos (Simulados o calculados)
     const revenueData = [
@@ -46,12 +46,16 @@ export default function Dashboard({ users, logs, isLoading, setCurrentView }: Da
         { name: 'Mar', total: totalRevenue * 0.45 },
     ];
     
+    // DATOS REALES DE LOS 4 PLANES
     const pieData = [
-        { name: 'Premium', value: users.filter(u => u.plan === 'Premium').length },
-        { name: 'Pro', value: users.filter(u => u.plan === 'Pro').length },
+        { name: 'Premium AI', value: users.filter(u => u.plan === 'Premium AI').length },
+        { name: 'Multisede', value: users.filter(u => u.plan === 'Multisede').length },
+        { name: 'Estandar', value: users.filter(u => u.plan === 'Estandar').length },
         { name: 'Free', value: users.filter(u => u.plan === 'Free').length },
     ];
-    const COLORS = ['#6366f1', '#a855f7', '#71717a'];
+    
+    // COLORES: Oro, Esmeralda, Azul, Gris
+    const COLORS = ['#fbbf24', '#10b981', '#3b82f6', '#71717a'];
 
     return (
         <div className="space-y-6 animate-in fade-in duration-500 pb-10">
@@ -142,17 +146,17 @@ export default function Dashboard({ users, logs, isLoading, setCurrentView }: Da
                             <tbody className="divide-y divide-zinc-800/50">
                                 {recentLogs.length > 0 ? recentLogs.map(log => (
                                     <tr key={log.id} className="group hover:bg-white/5 transition-colors">
-                                        <td className="p-4">
-                                            <div className="text-zinc-200 font-medium">{log.accion}</div>
-                                            <div className="text-xs text-zinc-500">{log.detalle}</div>
-                                        </td>
-                                        <td className="p-4 text-right">
-                                            <div className="text-emerald-400 font-mono font-medium">+${(log.monto || 0).toLocaleString()}</div>
-                                            <div className="text-xs text-zinc-600 flex items-center justify-end gap-1">
-                                                <Clock size={10} />
-                                                {new Date(log.fecha).toLocaleDateString()}
-                                            </div>
-                                        </td>
+                                            <td className="p-4">
+                                                <div className="text-zinc-200 font-medium">{log.accion}</div>
+                                                <div className="text-xs text-zinc-500">{log.detalle}</div>
+                                            </td>
+                                            <td className="p-4 text-right">
+                                                <div className="text-emerald-400 font-mono font-medium">+${(log.monto || 0).toLocaleString()}</div>
+                                                <div className="text-xs text-zinc-600 flex items-center justify-end gap-1">
+                                                    <Clock size={10} />
+                                                    {new Date(log.fecha).toLocaleDateString()}
+                                                </div>
+                                            </td>
                                     </tr>
                                 )) : (
                                     <tr><td className="p-8 text-center text-zinc-500 italic">Sin movimientos recientes</td></tr>
@@ -175,26 +179,27 @@ export default function Dashboard({ users, logs, isLoading, setCurrentView }: Da
                             <tbody className="divide-y divide-zinc-800/50">
                                 {recentUsers.map(user => (
                                     <tr key={user.id} className="group hover:bg-white/5 transition-colors">
-                                        <td className="p-4">
-                                            <div className="flex items-center gap-3">
-                                                <div className="w-8 h-8 rounded-full bg-zinc-800 flex items-center justify-center text-xs font-bold text-zinc-400 border border-zinc-700">
-                                                    {user.nombre.substring(0,2).toUpperCase()}
+                                            <td className="p-4">
+                                                <div className="flex items-center gap-3">
+                                                    <div className="w-8 h-8 rounded-full bg-zinc-800 flex items-center justify-center text-xs font-bold text-zinc-400 border border-zinc-700">
+                                                        {user.nombre.substring(0,2).toUpperCase()}
+                                                    </div>
+                                                    <div>
+                                                        <div className="text-zinc-200 font-medium">{user.nombre}</div>
+                                                        <div className="text-xs text-zinc-500">{user.email}</div>
+                                                    </div>
                                                 </div>
-                                                <div>
-                                                    <div className="text-zinc-200 font-medium">{user.nombre}</div>
-                                                    <div className="text-xs text-zinc-500">{user.email}</div>
-                                                </div>
-                                            </div>
-                                        </td>
-                                        <td className="p-4 text-right">
-                                            <span className={`px-2 py-1 rounded text-xs font-medium border ${
-                                                user.plan === 'Premium' ? 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20' :
-                                                user.plan === 'Pro' ? 'bg-purple-500/10 text-purple-400 border-purple-500/20' :
-                                                'bg-zinc-800 text-zinc-400 border-zinc-700'
-                                            }`}>
-                                                {user.plan}
-                                            </span>
-                                        </td>
+                                            </td>
+                                            <td className="p-4 text-right">
+                                                <span className={`px-2 py-1 rounded text-xs font-medium border ${
+                                                    user.plan === 'Premium AI' ? 'bg-amber-500/10 text-amber-400 border-amber-500/20' :
+                                                    user.plan === 'Multisede' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' :
+                                                    user.plan === 'Estandar' ? 'bg-blue-500/10 text-blue-400 border-blue-500/20' :
+                                                    'bg-zinc-800 text-zinc-400 border-zinc-700'
+                                                }`}>
+                                                    {user.plan}
+                                                </span>
+                                            </td>
                                     </tr>
                                 ))}
                             </tbody>
@@ -203,7 +208,7 @@ export default function Dashboard({ users, logs, isLoading, setCurrentView }: Da
                 </div>
             </div>
 
-            {/* GRÁFICOS (Conservados) */}
+            {/* GRÁFICOS */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6 h-[350px]">
                     <h3 className="text-white font-bold mb-6 flex items-center gap-2">
@@ -237,7 +242,7 @@ export default function Dashboard({ users, logs, isLoading, setCurrentView }: Da
                                 paddingAngle={5} 
                                 dataKey="value"
                             >
-                                {pieData.map((entry, index) => (
+                                {pieData.map((_, index) => (
                                     <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} stroke="none" />
                                 ))}
                             </Pie>
