@@ -1,0 +1,19 @@
+﻿src/App.tsx(15,23): error TS6133: 'setSidebarOpen' is declared but its value is never read.
+src/components/MonthlyClosingModal.tsx(3,10): error TS1484: 'AuditLog' is a type and must be imported using a type-only import when 'verbatimModuleSyntax' is enabled.
+src/components/MonthlyClosingModal.tsx(3,20): error TS1484: 'DashboardUser' is a type and must be imported using a type-only import when 'verbatimModuleSyntax' is enabled.
+src/components/MonthlyClosingModal.tsx(21,30): error TS2339: Property 'timestamp' does not exist on type 'AuditLog'.
+src/components/MonthlyClosingModal.tsx(26,24): error TS2339: Property 'type' does not exist on type 'AuditLog'.
+src/components/MonthlyClosingModal.tsx(26,49): error TS2339: Property 'amount' does not exist on type 'AuditLog'.
+src/components/MonthlyClosingModal.tsx(27,38): error TS2339: Property 'amount' does not exist on type 'AuditLog'.
+src/components/MonthlyClosingModal.tsx(29,47): error TS2551: Property 'action' does not exist on type 'AuditLog'. Did you mean 'accion'?
+src/components/MonthlyClosingModal.tsx(29,91): error TS2551: Property 'action' does not exist on type 'AuditLog'. Did you mean 'accion'?
+src/components/MonthlyClosingModal.tsx(33,47): error TS2339: Property 'user' does not exist on type 'AuditLog'.
+src/components/MonthlyClosingModal.tsx(33,71): error TS2339: Property 'user' does not exist on type 'AuditLog'.
+src/components/MonthlyClosingModal.tsx(36,46): error TS2339: Property 'status' does not exist on type 'DashboardUser'.
+src/components/UserEditModal.tsx(3,13): error TS6133: 'Save' is declared but its value is never read.
+src/components/UserEditModal.tsx(4,10): error TS1484: 'DashboardUser' is a type and must be imported using a type-only import when 'verbatimModuleSyntax' is enabled.
+src/views/Dashboard.tsx(12,46): error TS6133: 'setCurrentView' is declared but its value is never read.
+src/views/Metricas.tsx(24,10): error TS1484: 'DashboardUser' is a type and must be imported using a type-only import when 'verbatimModuleSyntax' is enabled.
+src/views/Metricas.tsx(24,25): error TS1484: 'AuditLog' is a type and must be imported using a type-only import when 'verbatimModuleSyntax' is enabled.
+src/views/Metricas.tsx(24,25): error TS6133: 'AuditLog' is declared but its value is never read.
+src/views/Usuarios.tsx(7,5): error TS6133: 'MoreHorizontal' is declared but its value is never read.
