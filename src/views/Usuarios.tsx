@@ -49,10 +49,6 @@ const Usuarios = ({ users, isLoading, onRefresh, onUpdateStatus, onToggleStatus,
     const [filterStatus, setFilterStatus] = useState('Todos');
     const [editingUser, setEditingUser] = useState<DashboardUser | null>(null);
 
-    const [confirmModal, setConfirmModal] = useState<{
-        isOpen: boolean; title: string; message: string; action: () => void; type: 'danger' | 'warning' | 'info';
-    }>({ isOpen: false, title: '', message: '', action: () => {}, type: 'info' });
-
     const filteredUsers = users.filter(user => {
         const matchesSearch = user.nombre.toLowerCase().includes(searchTerm.toLowerCase()) || 
                               user.email.toLowerCase().includes(searchTerm.toLowerCase());
@@ -65,14 +61,22 @@ const Usuarios = ({ users, isLoading, onRefresh, onUpdateStatus, onToggleStatus,
         window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
     };
 
-    if (users && users.length > 0) {
-        console.log("Datos recibidos:", users[0]);
-    }
+    const getUrgencyClass = (expiryDate: string | null) => {
+        if (!expiryDate) return '';
+        const now = new Date().getTime();
+        const expiry = new Date(expiryDate).getTime();
+        const diffHours = (expiry - now) / (1000 * 60 * 60);
+
+        if (diffHours < 0) return 'text-rose-500';
+        if (diffHours <= 48) return 'text-amber-400 animate-pulse';
+        return 'text-zinc-100';
+    };
 
     return (
         <div className="space-y-6 animate-in fade-in duration-500 relative">
             
             <UserEditModal 
+                key={editingUser?.id || 'modal'}
                 isOpen={!!editingUser} 
                 onClose={() => setEditingUser(null)} 
                 user={editingUser}
@@ -139,90 +143,89 @@ const Usuarios = ({ users, isLoading, onRefresh, onUpdateStatus, onToggleStatus,
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-zinc-800/50">
-                            {filteredUsers.map((user) => (
-                                <tr key={user.id} className="group hover:bg-white/[0.02] transition-colors">
-                                    <td className="px-6 py-4">
-                                        <div className="flex items-center gap-3">
-                                            <div className="w-9 h-9 rounded-lg bg-zinc-800 flex items-center justify-center text-indigo-400 text-xs font-black border border-zinc-700 uppercase">
-                                                {user.nombre.substring(0, 2)}
-                                            </div>
-                                            <div>
-                                                <p className="font-bold text-sm text-zinc-100">{user.nombre}</p>
-                                                <p className="text-[10px] text-zinc-500 font-mono tracking-tighter">{user.email}</p>
-                                            </div>
-                                        </div>
-                                    </td>
-                                    <td className="px-6 py-4">
-                                        <PlanBadge plan={user.plan} />
-                                    </td>
-                                    <td className="px-6 py-4">
-                                        <StatusBadge status={user.subscriptionStatus} />
-                                    </td>
-                                    <td className="px-6 py-4">
-                                        {(() => {
-                                            const expirationDate = user.trialEndsAt ? new Date(user.trialEndsAt) : null;
-                                            const now = new Date();
-                                            const diffTime = expirationDate ? expirationDate.getTime() - now.getTime() : null;
-                                            const diffDays = diffTime !== null ? Math.ceil(diffTime / (1000 * 60 * 60 * 24)) : null;
-                                            const isUrgent = diffDays !== null && diffDays <= 3;
-
-                                            return (
-                                                <div className={`flex items-center gap-2 font-mono text-xs ${isUrgent ? 'text-red-500 font-bold' : 'text-zinc-400'}`}>
-                                                    <Calendar size={14} className={isUrgent ? 'text-red-500' : 'text-zinc-600'} />
-                                                    {user.trialEndsAt ? new Date(user.trialEndsAt).toLocaleDateString() : 'N/A'}
+                            {filteredUsers.map((user) => {
+                                const urgencyClass = getUrgencyClass(user.trialEndsAt);
+                                return (
+                                    <tr key={user.id} className="group hover:bg-white/[0.02] transition-colors">
+                                        <td className="px-6 py-4">
+                                            <div className="flex items-center gap-3">
+                                                <div className="w-9 h-9 rounded-lg bg-zinc-800 flex items-center justify-center text-indigo-400 text-xs font-black border border-zinc-700 uppercase">
+                                                    {user.nombre.substring(0, 2)}
                                                 </div>
-                                            );
-                                        })()}
-                                    </td>
-                                    <td className="px-6 py-4 text-right">
-                                        <div className="flex items-center justify-end gap-1">
-                                            <button 
-                                                onClick={() => handleWhatsApp(user)} 
-                                                className="p-2 hover:bg-emerald-500/10 text-emerald-500 rounded-lg transition-all" 
-                                                title="Enviar WhatsApp"
-                                            >
-                                                <MessageCircle size={16} />
-                                            </button>
-                                            
-                                            <button 
-                                                onClick={() => setEditingUser(user)} 
-                                                className="p-2 hover:bg-zinc-800 text-zinc-400 hover:text-white rounded-lg transition-all"
-                                                title="Editar Usuario"
-                                            >
-                                                <Edit2 size={16} />
-                                            </button>
-                                            
-                                            <button 
-                                                onClick={() => onToggleStatus(user.id)}
-                                                className={`p-2 rounded-lg transition-all ${
-                                                    user.subscriptionStatus === 'active' 
-                                                    ? 'hover:bg-red-500/10 text-red-500/70 hover:text-red-500' 
-                                                    : 'hover:bg-emerald-500/10 text-emerald-500/70 hover:text-emerald-500'
-                                                }`}
-                                                title={user.subscriptionStatus === 'active' ? 'Bloquear Acceso' : 'Activar Acceso'}
-                                            >
-                                                {user.subscriptionStatus === 'active' ? <Lock size={16} /> : <Unlock size={16} />}
-                                            </button>
+                                                <div>
+                                                    <p className={`font-bold text-sm transition-all ${urgencyClass || 'text-zinc-100'}`}>
+                                                        {user.nombre}
+                                                        {urgencyClass.includes('animate-pulse') && <span className="ml-2 text-[7px] bg-amber-500/20 px-1 rounded border border-amber-500/30">URGENTE</span>}
+                                                    </p>
+                                                    <p className="text-[10px] text-zinc-500 font-mono tracking-tighter">{user.email}</p>
+                                                </div>
+                                            </div>
+                                        </td>
+                                        <td className="px-6 py-4">
+                                            <PlanBadge plan={user.plan} />
+                                        </td>
+                                        <td className="px-6 py-4">
+                                            <StatusBadge status={user.subscriptionStatus} />
+                                        </td>
+                                        <td className="px-6 py-4">
+                                            {(() => {
+                                                const expirationDate = user.trialEndsAt ? new Date(user.trialEndsAt) : null;
+                                                const now = new Date();
+                                                const diffTime = expirationDate ? expirationDate.getTime() - now.getTime() : null;
+                                                const diffDays = diffTime !== null ? Math.ceil(diffTime / (1000 * 60 * 60 * 24)) : null;
+                                                const isUrgent = diffDays !== null && diffDays <= 3;
 
-                                            <button 
-                                                onClick={() => onCycleStatus(user.id)}
-                                                className="p-2 hover:bg-zinc-800 text-zinc-500 hover:text-amber-500 rounded-lg transition-all" 
-                                                title="Rotar Estado (Trial -> Active)"
-                                            >
-                                                <Zap size={16} />
-                                            </button>
-                                        </div>
-                                    </td>
-                                </tr>
-                            ))}
+                                                return (
+                                                    <div className={`flex items-center gap-2 font-mono text-xs ${isUrgent ? 'text-red-500 font-bold' : 'text-zinc-400'}`}>
+                                                        <Calendar size={14} className={isUrgent ? 'text-red-500' : 'text-zinc-600'} />
+                                                        {user.trialEndsAt ? new Date(user.trialEndsAt).toLocaleDateString() : 'N/A'}
+                                                    </div>
+                                                );
+                                            })()}
+                                        </td>
+                                        <td className="px-6 py-4 text-right">
+                                            <div className="flex items-center justify-end gap-1">
+                                                <button 
+                                                    onClick={() => handleWhatsApp(user)} 
+                                                    className="p-2 hover:bg-emerald-500/10 text-emerald-500 rounded-lg transition-all" 
+                                                    title="Enviar WhatsApp"
+                                                >
+                                                    <MessageCircle size={16} />
+                                                </button>
+                                                <button 
+                                                    onClick={() => setEditingUser(user)} 
+                                                    className="p-2 hover:bg-zinc-800 text-zinc-400 hover:text-white rounded-lg transition-all"
+                                                    title="Editar Usuario"
+                                                >
+                                                    <Edit2 size={16} />
+                                                </button>
+                                                <button 
+                                                    onClick={() => onToggleStatus(user.id)}
+                                                    className={`p-2 rounded-lg transition-all ${
+                                                        user.subscriptionStatus === 'active' 
+                                                        ? 'hover:bg-red-500/10 text-red-500/70 hover:text-red-500' 
+                                                        : 'hover:bg-emerald-500/10 text-emerald-500/70 hover:text-emerald-500'
+                                                    }`}
+                                                    title={user.subscriptionStatus === 'active' ? 'Bloquear Acceso' : 'Activar Acceso'}
+                                                >
+                                                    {user.subscriptionStatus === 'active' ? <Lock size={16} /> : <Unlock size={16} />}
+                                                </button>
+                                                <button 
+                                                    onClick={() => onCycleStatus(user.id)}
+                                                    className="p-2 hover:bg-zinc-800 text-zinc-500 hover:text-amber-500 rounded-lg transition-all" 
+                                                    title="Rotar Estado (Trial -> Active)"
+                                                >
+                                                    <Zap size={16} />
+                                                </button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                );
+                            })}
                         </tbody>
                     </table>
                 </div>
             </div>
-            {/* Modal de confirmación (placeholder para futuras acciones) */}
-            {confirmModal.isOpen && (
-                <div className="hidden" />
-            )}
         </div>
     );
 };

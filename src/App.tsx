@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { Lock, ShieldCheck } from 'lucide-react'; 
 import Sidebar from './components/Sidebar';
 import Dashboard from './views/Dashboard';
 import Usuarios from './views/Usuarios';
@@ -8,73 +9,95 @@ import Configuracion from './views/Configuracion';
 import type { DashboardUser, AuditLog, Partner } from './types';
 
 export default function App() {
-  // --- ESTADOS ---
+  // --- ESTADOS DE SESIÓN (LOGIN) ---
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [currentUser, setCurrentUser] = useState<string | null>(null);
+  const [loginForm, setLoginForm] = useState({ user: '', pin: '' });
+  const [loginError, setLoginError] = useState('');
+
+  // --- ESTADOS ORIGINALES ---
   const [sidebarOpen] = useState(true);
   const [currentView, setCurrentView] = useState('dashboard');
   
-  // Datos Maestros
   const [users, setUsers] = useState<DashboardUser[]>([]);
   const [logs, setLogs] = useState<AuditLog[]>([]);
   
-  // SOCIOS: Inicializados como Socio 1 y 2 al 50% para garantizar equidad desde el arranque
   const [partners, setPartners] = useState<Partner[]>([
-    { id: '1', name: 'Socio 1', role: 'Socio Principal', share: 50 },
-    { id: '2', name: 'Socio 2', role: 'Socio Principal', share: 50 }
+    { id: '1', name: 'Rodrigo', role: 'Socio Principal', share: 50 },
+    { id: '2', name: 'Tomy', role: 'Socio Fundador', share: 50 }
   ]);
   
   const [isLoading, setIsLoading] = useState(true);
   const [errorLine, setErrorLine] = useState<string | null>(null);
 
-  // Carga Real desde Backend
+  // --- LÓGICA DE LOGIN ---
+  const handleLogin = (e: React.FormEvent) => {
+      e.preventDefault();
+      if (loginForm.user && loginForm.pin === '1234') {
+          setCurrentUser(loginForm.user);
+          setIsLoggedIn(true);
+          setLoginError('');
+      } else {
+          setLoginError('PIN incorrecto. Intenta nuevamente.');
+      }
+  };
+
+  // --- LÓGICA DE DATOS DESDE SUPABASE ---
   const fetchData = async () => {
+    if (!isLoggedIn) return; // Protegido tras login
+    
     setIsLoading(true);
     setErrorLine(null);
-    console.log("Iniciando FETCH de usuarios y métricas...");
     try {
-        // Fetch Users
-        const usersRes = await fetch('/api/users', { cache: 'no-store' });
-        console.log("Respuesta /api/users status:", usersRes.status);
+        // Pedimos a la base de datos los Usuarios y el Historial de Logs al mismo tiempo
+        const [usersRes, logsRes] = await Promise.all([
+            fetch('/api/users', { cache: 'no-store' }),
+            fetch('/api/logs', { cache: 'no-store' }).catch(() => null) // .catch por seguridad
+        ]);
+
+        // Cargar usuarios
         if (usersRes.ok) {
             const userData = await usersRes.json();
-            if (Array.isArray(userData)) {
-                console.log("✅ Usuarios cargados:", userData.length);
-                setUsers(userData);
-            } else {
-                setErrorLine(`Formato de datos erróneo: se esperaba lista pero se recibió ${typeof userData}`);
-            }
+            setUsers(Array.isArray(userData) ? userData : []);
         } else {
-            const errorText = await usersRes.text();
-            setErrorLine(`Error API (Usuarios): ${usersRes.status} - ${errorText.substring(0, 50)}`);
+            setErrorLine(`Error API (Usuarios): ${usersRes.status}`);
         }
 
-        
+        // Cargar Historial Real
+        if (logsRes && logsRes.ok) {
+            const logsData = await logsRes.json();
+            setLogs(Array.isArray(logsData) ? logsData : []);
+        }
     } catch (error: any) {
-        console.error("FATAL: Error de conexión con el Backend:", error);
-        setErrorLine(`Error de Conexión: ${error.message}. ¿Está prendido el servidor?`);
+        setErrorLine(`Error de Conexión. ¿Está prendido el servidor?`);
     } finally {
         setIsLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchData();
-    // Refresh cada 30 segundos
-    const interval = setInterval(fetchData, 30000);
-    return () => clearInterval(interval);
-  }, []);
+    if (isLoggedIn) {
+        fetchData();
+        const interval = setInterval(fetchData, 30000); // Refresco automático cada 30s
+        return () => clearInterval(interval);
+    }
+  }, [isLoggedIn]);
 
-  // --- LÓGICA DE NEGOCIO ---
+  // --- LÓGICA DE NEGOCIO Y FIRMA DE AUDITORÍA ---
 
-  const addLog = (accion: string, responsable: string, detalle: string, monto: number = 0) => {
-    const newLog: AuditLog = {
-      id: Date.now().toString(),
-      accion,
-      responsable,
-      detalle,
-      monto,
-      fecha: new Date().toISOString()
-    };
-    setLogs(prev => [newLog, ...prev]);
+  // Esto es para acciones sin usuario (ej: cambiar config de socios)
+  const addLog = async (accion: string, detalle: string, monto: number = 0) => {
+    const responsable = currentUser || 'Sistema'; 
+    try {
+        await fetch('/api/logs', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ accion, responsable, detalle, monto })
+        });
+        fetchData(); // Sincronizamos la tabla tras la inserción
+    } catch (error) {
+        console.error("No se pudo guardar el log suelto", error);
+    }
   };
 
   const handleUpdateStatus = async ({ userId, newStatus, trialEndsAt }: { userId: string, newStatus: 'active' | 'trialing' | 'expired', trialEndsAt?: string }) => {
@@ -84,21 +107,18 @@ export default function App() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 subscriptionStatus: newStatus,
-                trialEndsAt: trialEndsAt
+                trialEndsAt: trialEndsAt,
+                responsable: currentUser // <--- ¡AQUÍ ESTÁ LA MAGIA! Tu firma viaja al servidor
             })
         });
 
         if (response.ok) {
-            const updatedUser = await response.json();
-            console.log("✅ Usuario actualizado en DB:", updatedUser);
-            fetchData(); // Refrescar lista completa para estar sincronizados globalmente
-            addLog('Update DB', 'Admin', `ID ${userId}: Status ${newStatus}, Trial ${trialEndsAt || 'N/A'}`);
+            fetchData(); // Recargamos la vista para ver los nuevos estados y el nuevo log
         } else {
             const err = await response.text();
             setErrorLine(`Error guardando cambios: ${err}`);
         }
     } catch (error: any) {
-        console.error("Error en handleUpdateStatus:", error);
         setErrorLine("No se pudo conectar con el servidor para guardar.");
     }
   };
@@ -122,12 +142,66 @@ export default function App() {
   };
 
   const handleSaveConfig = (data: any) => {
-      // Sincronización: Si la configuración cambia los socios, actualizamos el estado global
       if (data.partners) {
           setPartners(data.partners);
-          addLog('Configuración', 'Admin', 'Se actualizó la estructura societaria');
+          addLog('Configuración', 'Se actualizó la estructura societaria', 0);
       }
   };
+
+  // --- PANTALLA DE LOGIN ---
+  if (!isLoggedIn) {
+      return (
+          <div className="flex h-screen bg-[#09090b] items-center justify-center font-sans">
+              <div className="bg-zinc-900 border border-zinc-800 p-8 rounded-2xl shadow-2xl w-full max-w-sm relative overflow-hidden">
+                  <div className="absolute top-0 left-0 w-full h-1 bg-indigo-500"></div>
+                  <div className="flex justify-center mb-6">
+                      <div className="w-16 h-16 bg-zinc-950 rounded-xl border border-zinc-800 flex items-center justify-center shadow-inner">
+                          <ShieldCheck size={32} className="text-indigo-500" />
+                      </div>
+                  </div>
+                  <h2 className="text-2xl font-bold text-white text-center mb-1">GSM CONTROL</h2>
+                  <p className="text-zinc-500 text-xs text-center font-mono uppercase tracking-widest mb-8">Acceso de Seguridad</p>
+                  
+                  <form onSubmit={handleLogin} className="space-y-4">
+                      <div>
+                          <label className="text-zinc-400 text-xs font-bold mb-1 block">OPERADOR</label>
+                          <select 
+                              className="w-full bg-zinc-950 border border-zinc-800 rounded-xl p-3 text-white focus:outline-none focus:border-indigo-500 appearance-none cursor-pointer transition-colors"
+                              value={loginForm.user}
+                              onChange={(e) => setLoginForm({...loginForm, user: e.target.value})}
+                              required
+                          >
+                              <option value="" disabled>Seleccionar usuario...</option>
+                              <option value="Rodrigo">👤 Rodrigo</option>
+                              <option value="Tomy">👤 Tomy</option>
+                          </select>
+                      </div>
+                      
+                      <div>
+                          <label className="text-zinc-400 text-xs font-bold mb-1 block">PIN DE ACCESO</label>
+                          <div className="relative">
+                              <Lock size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-600" />
+                              <input 
+                                  type="password" 
+                                  placeholder="••••"
+                                  className="w-full bg-zinc-950 border border-zinc-800 rounded-xl p-3 pl-10 text-white focus:outline-none focus:border-indigo-500 text-center tracking-[0.5em] transition-colors"
+                                  value={loginForm.pin}
+                                  onChange={(e) => setLoginForm({...loginForm, pin: e.target.value})}
+                                  required
+                              />
+                          </div>
+                      </div>
+
+                      {loginError && <p className="text-rose-500 text-xs text-center font-bold bg-rose-500/10 py-2 rounded-lg">{loginError}</p>}
+
+                      <button type="submit" className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 rounded-xl transition-all shadow-lg shadow-indigo-500/20 mt-2">
+                          INGRESAR AL SISTEMA
+                      </button>
+                  </form>
+              </div>
+          </div>
+      );
+  }
 
   // --- RENDERIZADO DE VISTAS ---
   const renderContent = () => {
@@ -147,7 +221,6 @@ export default function App() {
             return <Metricas users={users} />;
         case 'settings': 
             return <Configuracion onSave={handleSaveConfig} />;
-        
         default: 
             return <Dashboard 
                         users={users} 
@@ -162,7 +235,6 @@ export default function App() {
     <div className="flex h-screen bg-[#09090b] text-zinc-100 font-sans overflow-hidden">
       <Sidebar sidebarOpen={sidebarOpen} activeTab={currentView} setActiveTab={setCurrentView} />
       <main className="flex-1 flex flex-col overflow-hidden relative">
-         {/* BANNER DE ERROR */}
          {errorLine && (
              <div className="bg-red-600 text-white px-6 py-2 flex justify-between items-center animate-in slide-in-from-top duration-300">
                  <div className="flex items-center gap-2 text-sm font-bold">
