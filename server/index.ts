@@ -10,8 +10,8 @@ dotenv.config({ path: path.resolve(__dirname, "../.env") });
 import express from "express";
 import cors from "cors";
 import { getDb } from "./db";
-import { users, audit_logs } from "./schema";
-import { eq, desc } from "drizzle-orm";
+import { users, audit_logs, settings } from "./schema";
+import { eq, desc, sql } from "drizzle-orm";
 
 const app = express();
 const PORT = 5000;
@@ -104,9 +104,14 @@ app.get("/api/users", async (req, res) => {
         if (!dbUrl) throw new Error("DATABASE_URL not configured");
         const db = getDb(dbUrl);
         
-        const allUsers = await db.select().from(users);
+        const allWithSettings = await db.select({
+            user: users,
+            setting: settings
+        })
+        .from(users)
+        .leftJoin(settings, sql`${users.id}::text = ${settings.userId}`);
         
-        const mappedUsers = allUsers.map(u => {
+        const mappedUsers = allWithSettings.map(({ user: u, setting: s }) => {
             const planRaw = (u.plan || 'Estandar').toLowerCase();
             let planMapped = 'Estandar';
             if (planRaw.includes('premium')) planMapped = 'Premium AI';
@@ -125,7 +130,7 @@ app.get("/api/users", async (req, res) => {
                 cicloDePago: (u.cicloDePago || 'mensual') as any,
                 sucursalesExtra: u.sucursalesExtra || 0,
                 currentPeriodEnd: u.currentPeriodEnd ? new Date(u.currentPeriodEnd).toISOString() : null,
-                telefono: u.phone || ''
+                telefono: s?.phone || ''
             };
         });
 
@@ -168,12 +173,21 @@ app.patch("/api/users/:id", async (req, res) => {
         if (ciclo_de_pago) updateData.cicloDePago = ciclo_de_pago;
         if (sucursales_extra !== undefined) updateData.sucursalesExtra = sucursales_extra;
         if (currentPeriodEnd) updateData.currentPeriodEnd = new Date(currentPeriodEnd);
-        if (telefono !== undefined) updateData.phone = telefono; // Mapped to phone column
         if (plan) updateData.plan = plan;
 
         await db.update(users)
             .set(updateData)
             .where(eq(users.id, id));
+
+        // Secundary update for settings (phone)
+        if (telefono !== undefined) {
+             const [existingSettings] = await db.select().from(settings).where(eq(settings.userId, id));
+             if (existingSettings) {
+                 await db.update(settings).set({ phone: telefono }).where(eq(settings.userId, id));
+             } else {
+                 await db.insert(settings).values({ userId: id, phone: telefono });
+             }
+        }
 
         // Insert Audit Log using strict types
         await db.insert(audit_logs).values({
@@ -184,8 +198,16 @@ app.patch("/api/users/:id", async (req, res) => {
             fecha: new Date()
         });
 
-        // Fetch updated user to return it in frontend format
-        const [u] = await db.select().from(users).where(eq(users.id, id));
+        // Fetch updated user with settings
+        const results = await db.select({
+            user: users,
+            setting: settings
+        })
+        .from(users)
+        .leftJoin(settings, sql`${users.id}::text = ${settings.userId}`)
+        .where(eq(users.id, id));
+
+        const { user: u, setting: s } = results[0];
         
         const planRaw = (u.plan || 'Estandar').toLowerCase();
         let planMapped = 'Estandar';
@@ -205,7 +227,7 @@ app.patch("/api/users/:id", async (req, res) => {
             cicloDePago: (u.cicloDePago || 'mensual') as any,
             sucursalesExtra: u.sucursalesExtra || 0,
             currentPeriodEnd: u.currentPeriodEnd ? new Date(u.currentPeriodEnd).toISOString() : null,
-            telefono: u.phone || ''
+            telefono: s?.phone || ''
         };
 
         res.json(mappedUser);
