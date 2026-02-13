@@ -5,8 +5,7 @@ import Usuarios from './views/Usuarios';
 import ControlFlujo from './views/ControlFlujo';
 import Metricas from './views/Metricas';
 import Configuracion from './views/Configuracion';
-import type { DashboardUser, AuditLog, Partner, PlanGSM } from './types';
-import { MOCK_USERS, MOCK_LOGS } from './types';
+import type { DashboardUser, AuditLog, Partner } from './types';
 
 export default function App() {
   // --- ESTADOS ---
@@ -24,15 +23,44 @@ export default function App() {
   ]);
   
   const [isLoading, setIsLoading] = useState(true);
+  const [errorLine, setErrorLine] = useState<string | null>(null);
 
-  // Carga Inicial (Simulación de Fetch)
+  // Carga Real desde Backend
+  const fetchData = async () => {
+    setIsLoading(true);
+    setErrorLine(null);
+    console.log("Iniciando FETCH de usuarios y métricas...");
+    try {
+        // Fetch Users
+        const usersRes = await fetch('/api/users', { cache: 'no-store' });
+        console.log("Respuesta /api/users status:", usersRes.status);
+        if (usersRes.ok) {
+            const userData = await usersRes.json();
+            if (Array.isArray(userData)) {
+                console.log("✅ Usuarios cargados:", userData.length);
+                setUsers(userData);
+            } else {
+                setErrorLine(`Formato de datos erróneo: se esperaba lista pero se recibió ${typeof userData}`);
+            }
+        } else {
+            const errorText = await usersRes.text();
+            setErrorLine(`Error API (Usuarios): ${usersRes.status} - ${errorText.substring(0, 50)}`);
+        }
+
+        
+    } catch (error: any) {
+        console.error("FATAL: Error de conexión con el Backend:", error);
+        setErrorLine(`Error de Conexión: ${error.message}. ¿Está prendido el servidor?`);
+    } finally {
+        setIsLoading(false);
+    }
+  };
+
   useEffect(() => {
-    const timer = setTimeout(() => {
-       setUsers(MOCK_USERS);
-       setLogs(MOCK_LOGS);
-       setIsLoading(false);
-    }, 800);
-    return () => clearTimeout(timer);
+    fetchData();
+    // Refresh cada 30 segundos
+    const interval = setInterval(fetchData, 30000);
+    return () => clearInterval(interval);
   }, []);
 
   // --- LÓGICA DE NEGOCIO ---
@@ -49,25 +77,47 @@ export default function App() {
     setLogs(prev => [newLog, ...prev]);
   };
 
-  const handleUpdatePlan = ({ userId, newPlan }: { userId: string, newPlan: string }) => {
-    setUsers(prev => prev.map(u => u.id === userId ? { ...u, plan: newPlan as any } : u));
-    addLog('Cambio Plan', 'Admin', `Usuario ${userId} a ${newPlan}`, 0);
+  const handleUpdateStatus = async ({ userId, newStatus, trialEndsAt }: { userId: string, newStatus: 'active' | 'trialing' | 'expired', trialEndsAt?: string }) => {
+    try {
+        const response = await fetch(`/api/users/${userId}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                subscriptionStatus: newStatus,
+                trialEndsAt: trialEndsAt
+            })
+        });
+
+        if (response.ok) {
+            const updatedUser = await response.json();
+            console.log("✅ Usuario actualizado en DB:", updatedUser);
+            fetchData(); // Refrescar lista completa para estar sincronizados globalmente
+            addLog('Update DB', 'Admin', `ID ${userId}: Status ${newStatus}, Trial ${trialEndsAt || 'N/A'}`);
+        } else {
+            const err = await response.text();
+            setErrorLine(`Error guardando cambios: ${err}`);
+        }
+    } catch (error: any) {
+        console.error("Error en handleUpdateStatus:", error);
+        setErrorLine("No se pudo conectar con el servidor para guardar.");
+    }
   };
 
   const handleToggleStatus = (userId: string) => {
-    setUsers(prev => prev.map(u => u.id === userId ? { ...u, estado: u.estado === 'Activo' ? 'Inactivo' : 'Activo' } : u));
-    addLog('Cambio Estado', 'Admin', `Usuario ${userId} estado actualizado`);
-  };
-
-  const handleCyclePlan = (userId: string) => {
     const user = users.find(u => u.id === userId);
     if (user) {
-        // Orden Lógico de Ascenso: Free -> Estandar -> Multisede -> Premium AI
-        const plans: PlanGSM[] = ['Free', 'Estandar', 'Multisede', 'Premium AI'];
-        // Encuentra el índice actual y suma 1 (usando módulo % para volver al principio si llega al final)
-        const next = plans[(plans.indexOf(user.plan) + 1) % plans.length];
-        
-        handleUpdatePlan({ userId, newPlan: next });
+        const nextStatus = user.subscriptionStatus === 'active' ? 'expired' : 'active';
+        handleUpdateStatus({ userId, newStatus: nextStatus as any });
+    }
+  };
+
+  const handleCycleStatus = (userId: string) => {
+    const user = users.find(u => u.id === userId);
+    if (user) {
+        const statuses: ('active' | 'trialing' | 'expired')[] = ['trialing', 'active', 'expired'];
+        const currentIdx = statuses.indexOf(user.subscriptionStatus);
+        const next = statuses[(currentIdx + 1) % statuses.length];
+        handleUpdateStatus({ userId, newStatus: next });
     }
   };
 
@@ -77,7 +127,6 @@ export default function App() {
           setPartners(data.partners);
           addLog('Configuración', 'Admin', 'Se actualizó la estructura societaria');
       }
-      // Aquí iría la lógica para guardar supabaseUrl y Key si fuera necesario en App
   };
 
   // --- RENDERIZADO DE VISTAS ---
@@ -87,19 +136,16 @@ export default function App() {
             return <Usuarios 
                         users={users} 
                         isLoading={isLoading} 
-                        onRefresh={() => {}}
-                        onUpdatePlan={handleUpdatePlan} 
+                        onRefresh={fetchData}
+                        onUpdateStatus={handleUpdateStatus} 
                         onToggleStatus={handleToggleStatus} 
-                        onCyclePlan={handleCyclePlan} 
+                        onCycleStatus={handleCycleStatus} 
                     />;
         case 'audit': 
-            // Pasamos 'partners' para que el cálculo de dividendos funcione
             return <ControlFlujo logs={logs} partners={partners} />;
         case 'metrics': 
             return <Metricas users={users} />;
         case 'settings': 
-            // Eliminamos 'initialPartners' que causaba error. 
-            // El componente Configuracion gestiona su propio estado inicial o carga de localStorage.
             return <Configuracion onSave={handleSaveConfig} />;
         
         default: 
@@ -116,6 +162,19 @@ export default function App() {
     <div className="flex h-screen bg-[#09090b] text-zinc-100 font-sans overflow-hidden">
       <Sidebar sidebarOpen={sidebarOpen} activeTab={currentView} setActiveTab={setCurrentView} />
       <main className="flex-1 flex flex-col overflow-hidden relative">
+         {/* BANNER DE ERROR */}
+         {errorLine && (
+             <div className="bg-red-600 text-white px-6 py-2 flex justify-between items-center animate-in slide-in-from-top duration-300">
+                 <div className="flex items-center gap-2 text-sm font-bold">
+                     <span>⚠️ ERROR DE SINCRONIZACIÓN:</span>
+                     <span className="font-normal opacity-90">{errorLine}</span>
+                 </div>
+                 <button onClick={() => fetchData()} className="text-xs bg-white/20 hover:bg-white/30 px-3 py-1 rounded transition-colors uppercase font-bold">
+                     Reintentar ahora
+                 </button>
+             </div>
+         )}
+         
          <div className="flex-1 overflow-auto p-6 bg-[#09090b]">
              {renderContent()}
          </div>

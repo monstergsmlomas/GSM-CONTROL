@@ -31,13 +31,15 @@ const Sidebar = ({ sidebarOpen, activeTab, setActiveTab }: SidebarProps) => {
             `}
         >
             {/* LOGO */}
-            <div className="h-16 flex items-center px-6 border-b border-zinc-800">
-                <div className="w-8 h-8 rounded-lg bg-indigo-600 flex items-center justify-center shrink-0 shadow-lg shadow-indigo-500/20">
-                    <span className="text-white font-bold text-lg">G</span>
-                </div>
-                <div className={`ml-3 overflow-hidden transition-all duration-300 ${!sidebarOpen && 'w-0 opacity-0'}`}>
-                    <h1 className="text-white font-bold text-lg tracking-tight">GSM-FIX</h1>
-                    <p className="text-zinc-500 text-[10px] font-mono leading-none">Admin Console</p>
+            <div className="h-20 flex items-center px-6 border-b border-zinc-800 gap-3">
+                <img 
+                    src="/images/gsm-shield-logo.png" 
+                    alt="GSM-CONTROL Logo" 
+                    className="h-11 w-auto shrink-0" 
+                />
+                <div className={`overflow-hidden transition-all duration-300 ${!sidebarOpen && 'w-0 opacity-0'}`}>
+                    <h1 className="text-white font-bold text-lg tracking-tight leading-none">GSM-CONTROL</h1>
+                    <p className="text-zinc-500 text-[10px] font-mono mt-1 opacity-70">ADMIN CONSOLE</p>
                 </div>
             </div>
 

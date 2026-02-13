@@ -1,14 +1,15 @@
 
-import { pgTable, serial, text, timestamp, boolean } from "drizzle-orm/pg-core";
+import { pgTable, text, timestamp, uuid, boolean } from "drizzle-orm/pg-core";
 
 export const users = pgTable("users", {
-  id: serial("id").primaryKey(),
-  name: text("name").notNull(),
+  id: uuid("id").primaryKey().defaultRandom(),
   email: text("email").notNull().unique(),
-  plan: text("plan").default("Free"), // Free, Pro, Premium
-  status: text("status").default("Activo"), // Activo, Inactivo, Pendiente
-  appContext: text("app_context").default("GSM FIX"),
-  joinedAt: timestamp("joined_at").defaultNow(),
+  trialEndsAt: timestamp("trial_ends_at"),
+  subscriptionStatus: text("subscription_status"), // active, trialing, etc.
+  currentPeriodEnd: timestamp("current_period_end"),
+  billingInterval: text("billing_interval"),
+  plan: text("plan").default("Estandar"), // Free, Estandar, Multisede, Premium AI
+  isAutoRenew: boolean("is_auto_renew").default(true),
 });
 
 export type User = typeof users.$inferSelect;

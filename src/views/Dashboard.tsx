@@ -1,17 +1,17 @@
-import { 
-    Users, 
-    DollarSign, 
-    AlertTriangle, 
-    BarChart3, 
-    PieChart, 
-    ArrowRight, 
-    Clock, 
+import {
+    Users,
+    DollarSign,
+    AlertTriangle,
+    BarChart3,
+    PieChart,
+    ArrowRight,
+    Clock,
     TrendingUp,
     Activity
 } from 'lucide-react';
-import { 
-    BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, 
-    PieChart as RePieChart, Pie, Cell, Legend 
+import {
+    BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
+    PieChart as RePieChart, Pie, Cell, Legend
 } from 'recharts';
 import type { DashboardUser, AuditLog } from '../types';
 
@@ -31,36 +31,34 @@ export default function Dashboard({ users, logs, isLoading, setCurrentView }: Da
         );
     }
 
-    // --- CÁLCULOS EN TIEMPO REAL ---
     const totalRevenue = logs.reduce((acc, log) => acc + (log.monto || 0), 0);
-    const activeUsers = users.filter(u => u.estado === 'Activo').length;
-    
-    // Limitado a los últimos 3 registros
-    const recentLogs = [...logs].sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime()).slice(0, 3);
-    const recentUsers = [...users].sort((a, b) => new Date(b.fechaAlta).getTime() - new Date(a.fechaAlta).getTime()).slice(0, 3); 
+    const activeUsersFromMetrics = users.filter(u => u.subscriptionStatus === 'active').length;
+    const totalUsersFromMetrics = users.length;
+   
+    const recentLogs = [...logs].sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime()).slice(0, 5);
+    const recentUsers = Array.isArray(users) ? [...users].sort((a, b) => {
+        const dateA = a.fechaAlta ? new Date(a.fechaAlta).getTime() : 0;
+        const dateB = b.fechaAlta ? new Date(b.fechaAlta).getTime() : 0;
+        return dateB - dateA;
+    }).slice(0, 5) : [];
 
-    // Datos para gráficos (Simulados o calculados)
     const revenueData = [
         { name: 'Ene', total: totalRevenue * 0.2 },
         { name: 'Feb', total: totalRevenue * 0.35 },
         { name: 'Mar', total: totalRevenue * 0.45 },
     ];
-    
-    // DATOS REALES DE LOS 4 PLANES
-    const pieData = [
-        { name: 'Premium AI', value: users.filter(u => u.plan === 'Premium AI').length },
-        { name: 'Multisede', value: users.filter(u => u.plan === 'Multisede').length },
+   
+    const planDistribution = [
         { name: 'Estandar', value: users.filter(u => u.plan === 'Estandar').length },
-        { name: 'Free', value: users.filter(u => u.plan === 'Free').length },
+        { name: 'Multisede', value: users.filter(u => u.plan === 'Multisede').length },
+        { name: 'Premium AI', value: users.filter(u => u.plan === 'Premium AI').length },
+        { name: 'Free', value: users.filter(u => u.plan === 'Free' || u.subscriptionStatus === 'trialing').length },
     ];
-    
-    // COLORES: Oro, Esmeralda, Azul, Gris
+
     const COLORS = ['#fbbf24', '#10b981', '#3b82f6', '#71717a'];
 
     return (
         <div className="space-y-6 animate-in fade-in duration-500 pb-10">
-            
-            {/* ENCABEZADO */}
             <div className="flex justify-between items-end">
                 <div>
                     <h2 className="text-2xl font-bold text-white">Panel Principal</h2>
@@ -78,10 +76,8 @@ export default function Dashboard({ users, logs, isLoading, setCurrentView }: Da
                 </div>
             </div>
 
-            {/* KPI CARDS (Interactivos) */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                {/* Usuarios */}
-                <button 
+                <button
                     onClick={() => setCurrentView('users')}
                     className="bg-zinc-900 p-6 rounded-xl border border-zinc-800 shadow-sm relative overflow-hidden group hover:border-indigo-500/50 transition-all text-left w-full"
                 >
@@ -89,17 +85,16 @@ export default function Dashboard({ users, logs, isLoading, setCurrentView }: Da
                    <div className="flex justify-between items-start">
                        <div>
                            <p className="text-zinc-500 text-xs font-bold uppercase tracking-wider">Usuarios Activos</p>
-                           <h3 className="text-3xl font-bold text-white mt-2">{activeUsers} <span className="text-lg text-zinc-600 font-normal">/ {users.length}</span></h3>
+                           <h3 className="text-3xl font-bold text-white mt-2">{activeUsersFromMetrics} <span className="text-lg text-zinc-600 font-normal">/ {totalUsersFromMetrics}</span></h3>
                        </div>
                        <div className="bg-indigo-500/10 p-2 rounded-lg text-indigo-400"><Users size={20} /></div>
                    </div>
-                   <div className="mt-4 flex items-center gap-1 text-xs text-indigo-400 font-medium group-hover:underline">
+                   <div className="mt-4 flex items-center gap-1 text-xs text-indigo-400 font-medium group-hover:underline cursor-pointer">
                        Ver gestión de usuarios <ArrowRight size={12} />
                    </div>
                 </button>
-                
-                {/* Ingresos */}
-                <button 
+
+                <button
                     onClick={() => setCurrentView('audit')}
                     className="bg-zinc-900 p-6 rounded-xl border border-zinc-800 shadow-sm relative overflow-hidden group hover:border-emerald-500/50 transition-all text-left w-full"
                 >
@@ -111,12 +106,11 @@ export default function Dashboard({ users, logs, isLoading, setCurrentView }: Da
                        </div>
                        <div className="bg-emerald-500/10 p-2 rounded-lg text-emerald-400"><TrendingUp size={20} /></div>
                    </div>
-                   <div className="mt-4 flex items-center gap-1 text-xs text-emerald-400 font-medium group-hover:underline">
+                   <div className="mt-4 flex items-center gap-1 text-xs text-emerald-400 font-medium group-hover:underline cursor-pointer">
                        Ver flujo de caja <ArrowRight size={12} />
                    </div>
                 </button>
 
-                {/* Alertas */}
                 <div className="bg-zinc-900 p-6 rounded-xl border border-zinc-800 shadow-sm relative overflow-hidden group hover:border-amber-500/50 transition-colors">
                    <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity"><AlertTriangle size={60} /></div>
                    <div className="flex justify-between items-start">
@@ -130,10 +124,7 @@ export default function Dashboard({ users, logs, isLoading, setCurrentView }: Da
                 </div>
             </div>
 
-            {/* SECCIÓN DE VISTA PREVIA (LIMITADO A 3) */}
             <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-                
-                {/* Mini Control de Flujo */}
                 <div className="bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden flex flex-col">
                     <div className="p-5 border-b border-zinc-800 flex justify-between items-center bg-zinc-950/30">
                         <h3 className="font-bold text-white flex items-center gap-2">
@@ -166,7 +157,6 @@ export default function Dashboard({ users, logs, isLoading, setCurrentView }: Da
                     </div>
                 </div>
 
-                {/* Mini Gestión de Usuarios */}
                 <div className="bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden flex flex-col">
                     <div className="p-5 border-b border-zinc-800 flex justify-between items-center bg-zinc-950/30">
                         <h3 className="font-bold text-white flex items-center gap-2">
@@ -192,12 +182,12 @@ export default function Dashboard({ users, logs, isLoading, setCurrentView }: Da
                                             </td>
                                             <td className="p-4 text-right">
                                                 <span className={`px-2 py-1 rounded text-xs font-medium border ${
-                                                    user.plan === 'Premium AI' ? 'bg-amber-500/10 text-amber-400 border-amber-500/20' :
-                                                    user.plan === 'Multisede' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' :
-                                                    user.plan === 'Estandar' ? 'bg-blue-500/10 text-blue-400 border-blue-500/20' :
+                                                    user.subscriptionStatus === 'active' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' :
+                                                    user.subscriptionStatus === 'trialing' ? 'bg-blue-500/10 text-blue-400 border-blue-500/20' :
+                                                    user.subscriptionStatus === 'expired' ? 'bg-amber-500/10 text-amber-400 border-amber-500/20' :
                                                     'bg-zinc-800 text-zinc-400 border-zinc-700'
                                                 }`}>
-                                                    {user.plan}
+                                                    {user.subscriptionStatus}
                                                 </span>
                                             </td>
                                     </tr>
@@ -208,7 +198,6 @@ export default function Dashboard({ users, logs, isLoading, setCurrentView }: Da
                 </div>
             </div>
 
-            {/* GRÁFICOS */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6 h-[350px]">
                     <h3 className="text-white font-bold mb-6 flex items-center gap-2">
@@ -219,9 +208,9 @@ export default function Dashboard({ users, logs, isLoading, setCurrentView }: Da
                             <CartesianGrid strokeDasharray="3 3" stroke="#27272a" vertical={false} />
                             <XAxis dataKey="name" stroke="#71717a" tickLine={false} axisLine={false} />
                             <YAxis stroke="#71717a" tickLine={false} axisLine={false} tickFormatter={(value) => `$${value}`} />
-                            <Tooltip 
-                                contentStyle={{ backgroundColor: '#18181b', borderColor: '#27272a', color: '#fff', borderRadius: '8px' }} 
-                                cursor={{fill: '#27272a'}} 
+                            <Tooltip
+                                contentStyle={{ backgroundColor: '#18181b', borderColor: '#27272a', color: '#fff', borderRadius: '8px' }}
+                                cursor={{fill: '#27272a'}}
                             />
                             <Bar dataKey="total" fill="#10b981" radius={[4, 4, 0, 0]} barSize={40} />
                         </BarChart>
@@ -234,16 +223,18 @@ export default function Dashboard({ users, logs, isLoading, setCurrentView }: Da
                     </h3>
                     <ResponsiveContainer width="100%" height="85%">
                         <RePieChart>
-                            <Pie 
-                                data={pieData} 
-                                cx="50%" cy="50%" 
-                                innerRadius={60} 
-                                outerRadius={80} 
-                                paddingAngle={5} 
+                            <Pie
+                                data={planDistribution}
+                                cx="50%"
+                                cy="50%"
+                                innerRadius={60}
+                                outerRadius={80}
+                                paddingAngle={5}
                                 dataKey="value"
+                                animationBegin={400}
                             >
-                                {pieData.map((_, index) => (
-                                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} stroke="none" />
+                                {planDistribution.map((_: any, index: number) => (
+                                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                                 ))}
                             </Pie>
                             <Tooltip contentStyle={{ backgroundColor: '#18181b', borderColor: '#27272a', color: '#fff', borderRadius: '8px' }} />
