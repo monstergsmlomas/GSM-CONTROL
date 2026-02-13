@@ -9,6 +9,9 @@ export interface DashboardUser {
   subscriptionStatus: 'active' | 'trialing' | 'expired';
   plan: 'Estandar' | 'Multisede' | 'Premium AI' | 'Free';
   trialEndsAt: string | null;
+  cicloDePago?: 'mensual' | 'semestral' | 'anual'; // Añadido opcional para compatibilidad hacia atrás
+  sucursalesExtra?: number; // Añadido opcional
+  currentPeriodEnd?: string | null;
 }
 
 export interface AuditLog {

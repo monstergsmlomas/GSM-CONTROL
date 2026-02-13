@@ -9,13 +9,11 @@ import Configuracion from './views/Configuracion';
 import type { DashboardUser, AuditLog, Partner } from './types';
 
 export default function App() {
-  // --- ESTADOS DE SESIÓN (LOGIN) ---
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [currentUser, setCurrentUser] = useState<string | null>(null);
   const [loginForm, setLoginForm] = useState({ user: '', pin: '' });
   const [loginError, setLoginError] = useState('');
 
-  // --- ESTADOS ORIGINALES ---
   const [sidebarOpen] = useState(true);
   const [currentView, setCurrentView] = useState('dashboard');
   
@@ -30,7 +28,6 @@ export default function App() {
   const [isLoading, setIsLoading] = useState(true);
   const [errorLine, setErrorLine] = useState<string | null>(null);
 
-  // --- LÓGICA DE LOGIN ---
   const handleLogin = (e: React.FormEvent) => {
       e.preventDefault();
       if (loginForm.user && loginForm.pin === '1234') {
@@ -42,20 +39,17 @@ export default function App() {
       }
   };
 
-  // --- LÓGICA DE DATOS DESDE SUPABASE ---
   const fetchData = async () => {
-    if (!isLoggedIn) return; // Protegido tras login
+    if (!isLoggedIn) return;
     
     setIsLoading(true);
     setErrorLine(null);
     try {
-        // Pedimos a la base de datos los Usuarios y el Historial de Logs al mismo tiempo
         const [usersRes, logsRes] = await Promise.all([
             fetch('/api/users', { cache: 'no-store' }),
-            fetch('/api/logs', { cache: 'no-store' }).catch(() => null) // .catch por seguridad
+            fetch('/api/logs', { cache: 'no-store' }).catch(() => null)
         ]);
 
-        // Cargar usuarios
         if (usersRes.ok) {
             const userData = await usersRes.json();
             setUsers(Array.isArray(userData) ? userData : []);
@@ -63,7 +57,6 @@ export default function App() {
             setErrorLine(`Error API (Usuarios): ${usersRes.status}`);
         }
 
-        // Cargar Historial Real
         if (logsRes && logsRes.ok) {
             const logsData = await logsRes.json();
             setLogs(Array.isArray(logsData) ? logsData : []);
@@ -78,14 +71,11 @@ export default function App() {
   useEffect(() => {
     if (isLoggedIn) {
         fetchData();
-        const interval = setInterval(fetchData, 30000); // Refresco automático cada 30s
+        const interval = setInterval(fetchData, 30000); 
         return () => clearInterval(interval);
     }
   }, [isLoggedIn]);
 
-  // --- LÓGICA DE NEGOCIO Y FIRMA DE AUDITORÍA ---
-
-  // Esto es para acciones sin usuario (ej: cambiar config de socios)
   const addLog = async (accion: string, detalle: string, monto: number = 0) => {
     const responsable = currentUser || 'Sistema'; 
     try {
@@ -94,13 +84,14 @@ export default function App() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ accion, responsable, detalle, monto })
         });
-        fetchData(); // Sincronizamos la tabla tras la inserción
+        fetchData(); 
     } catch (error) {
         console.error("No se pudo guardar el log suelto", error);
     }
   };
 
-  const handleUpdateStatus = async ({ userId, newStatus, trialEndsAt }: { userId: string, newStatus: 'active' | 'trialing' | 'expired', trialEndsAt?: string }) => {
+  // ACTUALIZADO PARA INCLUIR currentPeriodEnd
+  const handleUpdateStatus = async ({ userId, newStatus, trialEndsAt, currentPeriodEnd, cicloDePago, sucursalesExtra, plan }: { userId: string, newStatus: 'active' | 'trialing' | 'expired', trialEndsAt?: string, currentPeriodEnd?: string, cicloDePago?: string, sucursalesExtra?: number, plan?: string }) => {
     try {
         const response = await fetch(`/api/users/${userId}`, {
             method: 'PATCH',
@@ -108,12 +99,16 @@ export default function App() {
             body: JSON.stringify({
                 subscriptionStatus: newStatus,
                 trialEndsAt: trialEndsAt,
-                responsable: currentUser // <--- ¡AQUÍ ESTÁ LA MAGIA! Tu firma viaja al servidor
+                currentPeriodEnd: currentPeriodEnd, // NUEVO
+                ciclo_de_pago: cicloDePago,
+                sucursales_extra: sucursalesExtra,
+                plan: plan,
+                responsable: currentUser 
             })
         });
 
         if (response.ok) {
-            fetchData(); // Recargamos la vista para ver los nuevos estados y el nuevo log
+            fetchData(); 
         } else {
             const err = await response.text();
             setErrorLine(`Error guardando cambios: ${err}`);
@@ -121,6 +116,29 @@ export default function App() {
     } catch (error: any) {
         setErrorLine("No se pudo conectar con el servidor para guardar.");
     }
+  };
+
+  const handleDeleteUser = async (userId: string) => {
+      if (!window.confirm("⚠️ ¿Estás seguro de que deseas eliminar permanentemente a este usuario? Esta acción NO se puede deshacer.")) {
+          return;
+      }
+
+      try {
+          const response = await fetch(`/api/users/${userId}`, {
+              method: 'DELETE',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ responsable: currentUser }) 
+          });
+
+          if (response.ok) {
+              fetchData(); 
+          } else {
+              const err = await response.text();
+              setErrorLine(`Error eliminando usuario: ${err}`);
+          }
+      } catch (error: any) {
+          setErrorLine("No se pudo conectar con el servidor para eliminar.");
+      }
   };
 
   const handleToggleStatus = (userId: string) => {
@@ -148,7 +166,6 @@ export default function App() {
       }
   };
 
-  // --- PANTALLA DE LOGIN ---
   if (!isLoggedIn) {
       return (
           <div className="flex h-screen bg-[#09090b] items-center justify-center font-sans">
@@ -203,7 +220,6 @@ export default function App() {
       );
   }
 
-  // --- RENDERIZADO DE VISTAS ---
   const renderContent = () => {
       switch (currentView) {
         case 'users': 
@@ -214,6 +230,7 @@ export default function App() {
                         onUpdateStatus={handleUpdateStatus} 
                         onToggleStatus={handleToggleStatus} 
                         onCycleStatus={handleCycleStatus} 
+                        onDeleteUser={handleDeleteUser}
                     />;
         case 'audit': 
             return <ControlFlujo logs={logs} partners={partners} />;

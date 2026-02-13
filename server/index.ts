@@ -121,7 +121,10 @@ app.get("/api/users", async (req, res) => {
                 fechaAlta: u.trialEndsAt ? new Date(u.trialEndsAt).toISOString() : new Date().toISOString(),
                 trialEndsAt: u.trialEndsAt ? new Date(u.trialEndsAt).toISOString() : null,
                 subscriptionStatus: (u.subscriptionStatus || 'expired').toLowerCase() as 'active' | 'trialing' | 'expired',
-                plan: planMapped as any
+                plan: planMapped as any,
+                cicloDePago: (u.cicloDePago || 'mensual') as any,
+                sucursalesExtra: u.sucursalesExtra || 0,
+                currentPeriodEnd: u.currentPeriodEnd ? new Date(u.currentPeriodEnd).toISOString() : null
             };
         });
 
@@ -136,7 +139,7 @@ app.get("/api/users", async (req, res) => {
 app.patch("/api/users/:id", async (req, res) => {
     try {
         const { id } = req.params;
-        const { subscriptionStatus, trialEndsAt, responsable } = req.body;
+        const { subscriptionStatus, trialEndsAt, responsable, ciclo_de_pago, sucursales_extra, currentPeriodEnd } = req.body;
         
         const dbUrl = (req.headers['x-db-url'] as string) || process.env.DATABASE_URL;
         if (!dbUrl) throw new Error("DATABASE_URL not configured");
@@ -160,6 +163,10 @@ app.patch("/api/users/:id", async (req, res) => {
                 updateData.subscriptionStatus = 'trialing';
             }
         }
+
+        if (ciclo_de_pago) updateData.cicloDePago = ciclo_de_pago;
+        if (sucursales_extra !== undefined) updateData.sucursalesExtra = sucursales_extra;
+        if (currentPeriodEnd) updateData.currentPeriodEnd = new Date(currentPeriodEnd);
 
         await db.update(users)
             .set(updateData)
@@ -191,13 +198,44 @@ app.patch("/api/users/:id", async (req, res) => {
             fechaAlta: u.trialEndsAt ? new Date(u.trialEndsAt).toISOString() : new Date().toISOString(),
             trialEndsAt: u.trialEndsAt ? new Date(u.trialEndsAt).toISOString() : null,
             subscriptionStatus: (u.subscriptionStatus || 'expired').toLowerCase() as 'active' | 'trialing' | 'expired',
-            plan: planMapped as any
+            plan: planMapped as any,
+            cicloDePago: (u.cicloDePago || 'mensual') as any,
+            sucursalesExtra: u.sucursalesExtra || 0,
+            currentPeriodEnd: u.currentPeriodEnd ? new Date(u.currentPeriodEnd).toISOString() : null
         };
 
         res.json(mappedUser);
     } catch (error: any) {
         console.error("Error updating user:", error);
         res.status(500).json({ error: "Failed to update user" });
+    }
+});
+
+// DELETE /api/users/:id
+app.delete("/api/users/:id", async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { responsable } = req.body;
+        
+        const dbUrl = (req.headers['x-db-url'] as string) || process.env.DATABASE_URL;
+        if (!dbUrl) throw new Error("DATABASE_URL not configured");
+        const db = getDb(dbUrl);
+
+        // Audit before deletion
+        await db.insert(audit_logs).values({
+            accion: 'Eliminación de Cliente',
+            detalle: `Usuario ID ${id} eliminado permanentemente`,
+            responsable: responsable || "Sistema",
+            monto: 0,
+            fecha: new Date()
+        });
+
+        await db.delete(users).where(eq(users.id, id));
+
+        res.json({ success: true });
+    } catch (error: any) {
+        console.error("Error deleting user:", error);
+        res.status(500).json({ error: "Failed to delete user" });
     }
 });
 

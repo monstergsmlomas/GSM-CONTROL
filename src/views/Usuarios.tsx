@@ -11,9 +11,10 @@ interface UsuariosProps {
     users: DashboardUser[];
     isLoading: boolean;
     onRefresh: () => void;
-    onUpdateStatus: (data: { userId: string, newStatus: 'active' | 'trialing' | 'expired', trialEndsAt?: string }) => void;
+    onUpdateStatus: (data: { userId: string, newStatus: 'active' | 'trialing' | 'expired', trialEndsAt?: string, currentPeriodEnd?: string, cicloDePago?: string, sucursalesExtra?: number, plan?: string }) => void;
     onToggleStatus: (userId: string) => void;
     onCycleStatus: (userId: string) => void;
+    onDeleteUser: (userId: string) => void;
 }
 
 const StatusBadge = ({ status }: { status: string }) => {
@@ -44,7 +45,7 @@ const PlanBadge = ({ plan }: { plan: string }) => {
     );
 };
 
-const Usuarios = ({ users, isLoading, onRefresh, onUpdateStatus, onToggleStatus, onCycleStatus }: UsuariosProps) => {
+const Usuarios = ({ users, isLoading, onRefresh, onUpdateStatus, onToggleStatus, onCycleStatus, onDeleteUser }: UsuariosProps) => {
     const [searchTerm, setSearchTerm] = useState('');
     const [filterStatus, setFilterStatus] = useState('Todos');
     const [editingUser, setEditingUser] = useState<DashboardUser | null>(null);
@@ -80,7 +81,24 @@ const Usuarios = ({ users, isLoading, onRefresh, onUpdateStatus, onToggleStatus,
                 isOpen={!!editingUser} 
                 onClose={() => setEditingUser(null)} 
                 user={editingUser}
-                onSave={(id, status, trialDate) => onUpdateStatus({ userId: id, newStatus: status as any, trialEndsAt: trialDate })}
+                onSave={(id, status, trialDate, periodEnd, ciclo, sucursales, plan) => {
+                    onUpdateStatus({ 
+                        userId: id, 
+                        newStatus: status as any, 
+                        // Enviamos la fecha solo si no está vacía, para no enojar a la base de datos
+                        trialEndsAt: trialDate || undefined,
+                        currentPeriodEnd: periodEnd || undefined, 
+                        cicloDePago: ciclo,
+                        sucursalesExtra: sucursales,
+                        plan: plan 
+                    });
+                    // LA MAGIA: Cierra la ventana automáticamente al hacer clic en Guardar
+                    setEditingUser(null);
+                }}
+                onDelete={(id) => {
+                    onDeleteUser(id);
+                    setEditingUser(null);
+                }}
             />
 
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
@@ -138,13 +156,13 @@ const Usuarios = ({ users, isLoading, onRefresh, onUpdateStatus, onToggleStatus,
                                 <th className="px-6 py-4 text-[10px] font-black text-zinc-500 uppercase">Suscriptor</th>
                                 <th className="px-6 py-4 text-[10px] font-black text-zinc-500 uppercase">Plan</th>
                                 <th className="px-6 py-4 text-[10px] font-black text-zinc-500 uppercase">Estado</th>
-                                <th className="px-6 py-4 text-[10px] font-black text-zinc-500 uppercase">Vencimiento</th>
+                                <th className="px-6 py-4 text-[10px] font-black text-zinc-500 uppercase">Vencimientos</th>
                                 <th className="px-6 py-4 text-[10px] font-black text-zinc-500 uppercase text-right">Acciones</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-zinc-800/50">
                             {filteredUsers.map((user) => {
-                                const urgencyClass = getUrgencyClass(user.trialEndsAt);
+                                const urgencyClass = getUrgencyClass(user.currentPeriodEnd || user.trialEndsAt); 
                                 return (
                                     <tr key={user.id} className="group hover:bg-white/[0.02] transition-colors">
                                         <td className="px-6 py-4">
@@ -168,20 +186,18 @@ const Usuarios = ({ users, isLoading, onRefresh, onUpdateStatus, onToggleStatus,
                                             <StatusBadge status={user.subscriptionStatus} />
                                         </td>
                                         <td className="px-6 py-4">
-                                            {(() => {
-                                                const expirationDate = user.trialEndsAt ? new Date(user.trialEndsAt) : null;
-                                                const now = new Date();
-                                                const diffTime = expirationDate ? expirationDate.getTime() - now.getTime() : null;
-                                                const diffDays = diffTime !== null ? Math.ceil(diffTime / (1000 * 60 * 60 * 24)) : null;
-                                                const isUrgent = diffDays !== null && diffDays <= 3;
-
-                                                return (
-                                                    <div className={`flex items-center gap-2 font-mono text-xs ${isUrgent ? 'text-red-500 font-bold' : 'text-zinc-400'}`}>
-                                                        <Calendar size={14} className={isUrgent ? 'text-red-500' : 'text-zinc-600'} />
-                                                        {user.trialEndsAt ? new Date(user.trialEndsAt).toLocaleDateString() : 'N/A'}
-                                                    </div>
-                                                );
-                                            })()}
+                                            <div className="space-y-1">
+                                                {/* Fecha de Suscripción Paga */}
+                                                <div className={`flex items-center gap-2 font-mono text-[10px] ${user.subscriptionStatus === 'active' ? 'text-emerald-400' : 'text-zinc-500'}`}>
+                                                    <CreditCard size={12} className={user.subscriptionStatus === 'active' ? 'text-emerald-500' : 'text-zinc-600'} />
+                                                    Susc: {user.currentPeriodEnd ? new Date(user.currentPeriodEnd).toLocaleDateString() : 'N/A'}
+                                                </div>
+                                                {/* Fecha de Trial */}
+                                                <div className={`flex items-center gap-2 font-mono text-[10px] ${user.subscriptionStatus === 'trialing' ? 'text-amber-400' : 'text-zinc-500'}`}>
+                                                    <Calendar size={12} className={user.subscriptionStatus === 'trialing' ? 'text-amber-500' : 'text-zinc-600'} />
+                                                    Trial: {user.trialEndsAt ? new Date(user.trialEndsAt).toLocaleDateString() : 'N/A'}
+                                                </div>
+                                            </div>
                                         </td>
                                         <td className="px-6 py-4 text-right">
                                             <div className="flex items-center justify-end gap-1">

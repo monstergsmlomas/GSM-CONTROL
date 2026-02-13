@@ -10,6 +10,8 @@ export const users = pgTable("users", {
   billingInterval: text("billing_interval"),
   plan: text("plan").default("Estandar"), // Free, Estandar, Multisede, Premium AI
   isAutoRenew: boolean("is_auto_renew").default(true),
+  cicloDePago: text("ciclo_de_pago").default("mensual"), // mensual, semestral, anual
+  sucursalesExtra: integer("sucursales_extra").default(0),
 });
 
 export const audit_logs = pgTable("audit_logs", {
