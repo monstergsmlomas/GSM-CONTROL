@@ -124,7 +124,8 @@ app.get("/api/users", async (req, res) => {
                 plan: planMapped as any,
                 cicloDePago: (u.cicloDePago || 'mensual') as any,
                 sucursalesExtra: u.sucursalesExtra || 0,
-                currentPeriodEnd: u.currentPeriodEnd ? new Date(u.currentPeriodEnd).toISOString() : null
+                currentPeriodEnd: u.currentPeriodEnd ? new Date(u.currentPeriodEnd).toISOString() : null,
+                telefono: u.phone || ''
             };
         });
 
@@ -139,7 +140,7 @@ app.get("/api/users", async (req, res) => {
 app.patch("/api/users/:id", async (req, res) => {
     try {
         const { id } = req.params;
-        const { subscriptionStatus, trialEndsAt, responsable, ciclo_de_pago, sucursales_extra, currentPeriodEnd } = req.body;
+        const { subscriptionStatus, trialEndsAt, responsable, ciclo_de_pago, sucursales_extra, currentPeriodEnd, telefono, plan } = req.body;
         
         const dbUrl = (req.headers['x-db-url'] as string) || process.env.DATABASE_URL;
         if (!dbUrl) throw new Error("DATABASE_URL not configured");
@@ -167,6 +168,8 @@ app.patch("/api/users/:id", async (req, res) => {
         if (ciclo_de_pago) updateData.cicloDePago = ciclo_de_pago;
         if (sucursales_extra !== undefined) updateData.sucursalesExtra = sucursales_extra;
         if (currentPeriodEnd) updateData.currentPeriodEnd = new Date(currentPeriodEnd);
+        if (telefono !== undefined) updateData.phone = telefono; // Mapped to phone column
+        if (plan) updateData.plan = plan;
 
         await db.update(users)
             .set(updateData)
@@ -201,7 +204,8 @@ app.patch("/api/users/:id", async (req, res) => {
             plan: planMapped as any,
             cicloDePago: (u.cicloDePago || 'mensual') as any,
             sucursalesExtra: u.sucursalesExtra || 0,
-            currentPeriodEnd: u.currentPeriodEnd ? new Date(u.currentPeriodEnd).toISOString() : null
+            currentPeriodEnd: u.currentPeriodEnd ? new Date(u.currentPeriodEnd).toISOString() : null,
+            telefono: u.phone || ''
         };
 
         res.json(mappedUser);
@@ -224,7 +228,7 @@ app.delete("/api/users/:id", async (req, res) => {
         // Audit before deletion
         await db.insert(audit_logs).values({
             accion: 'Eliminación de Cliente',
-            detalle: `Usuario ID ${id} eliminado permanentemente`,
+            detalle: `Se eliminó permanentemente al usuario con ID ${id}`,
             responsable: responsable || "Sistema",
             monto: 0,
             fecha: new Date()

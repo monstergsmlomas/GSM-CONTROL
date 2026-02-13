@@ -1,48 +1,41 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { 
     Settings, Shield, Save, Key, User, 
-    CheckCircle2, Database, Edit2, X, Check, PieChart, AlertTriangle 
+    CheckCircle2, PieChart, AlertTriangle, Edit2, Check, X, MessageCircle, Target 
 } from 'lucide-react';
 import type { Partner } from '../types';
 
 interface ConfiguracionProps {
     onSave: (data: any) => void;
     initialPartners?: Partner[];
+    initialWhatsappTemplate?: string;
+    initialMrrTarget?: number; // NUEVA PROP
 }
 
-export default function Configuracion({ onSave, initialPartners }: ConfiguracionProps) {
-    // --- ESTADOS ---
+export default function Configuracion({ onSave, initialPartners, initialWhatsappTemplate, initialMrrTarget }: ConfiguracionProps) {
     const [loading, setLoading] = useState(false);
     const [success, setSuccess] = useState(false);
 
-    // Socios: Usamos props o default, pero NO permitimos agregar/quitar
     const [partners, setPartners] = useState<Partner[]>(initialPartners || [
-        { id: '1', name: 'Socio 1', role: 'Socio Principal', share: 50 },
-        { id: '2', name: 'Socio 2', role: 'Socio Principal', share: 50 }
+        { id: '1', name: 'Rodrigo', role: 'Socio Principal', share: 50 },
+        { id: '2', name: 'Tomy', role: 'Socio Fundador', share: 50 }
     ]);
     
-    // Estado para editar existente
     const [editingId, setEditingId] = useState<string | null>(null);
     const [tempPartner, setTempPartner] = useState<Partner | null>(null);
 
-    // Credenciales & Supabase
-    const [credentials, setCredentials] = useState({ username: 'Admin', currentPassword: '', newPassword: '' });
-    const [supabaseUrl, setSupabaseUrl] = useState('');
-    const [supabaseKey, setSupabaseKey] = useState('');
+    const [selectedUserForPin, setSelectedUserForPin] = useState('Rodrigo');
+    const [pinForm, setPinForm] = useState({ currentPin: '', newPin: '', confirmPin: '' });
+    const [pinMessage, setPinMessage] = useState({ type: '', text: '' });
 
-    // Cálculo del total de acciones (Validación visual)
+    const [whatsappTemplate, setWhatsappTemplate] = useState(initialWhatsappTemplate || '');
+    
+    // ESTADO DE LA META
+    const [mrrTarget, setMrrTarget] = useState<number>(initialMrrTarget || 1000000);
+
     const totalShares = partners.reduce((sum, p) => sum + (editingId === p.id && tempPartner ? tempPartner.share : p.share), 0);
-    const isShareValid = Math.abs(totalShares - 100) < 0.1; // Tolerancia pequeña para decimales
+    const isShareValid = Math.abs(totalShares - 100) < 0.1;
 
-    // Carga inicial de datos guardados
-    useEffect(() => {
-        const savedUrl = localStorage.getItem('supabase_url');
-        const savedKey = localStorage.getItem('supabase_key');
-        if (savedUrl) setSupabaseUrl(savedUrl);
-        if (savedKey) setSupabaseKey(savedKey);
-    }, []);
-
-    // Funciones de Edición
     const startEditing = (partner: Partner) => {
         setEditingId(partner.id);
         setTempPartner({ ...partner });
@@ -60,6 +53,31 @@ export default function Configuracion({ onSave, initialPartners }: Configuracion
         setTempPartner(null);
     };
 
+    const handleUpdatePin = () => {
+        setPinMessage({ type: '', text: '' });
+
+        if (!pinForm.newPin || pinForm.newPin.length < 4) {
+            setPinMessage({ type: 'error', text: 'El nuevo PIN debe tener al menos 4 caracteres.' });
+            return;
+        }
+
+        if (pinForm.newPin !== pinForm.confirmPin) {
+            setPinMessage({ type: 'error', text: 'Los nuevos PINs no coinciden.' });
+            return;
+        }
+
+        const savedPin = localStorage.getItem(`pin_${selectedUserForPin}`) || '1234';
+        
+        if (pinForm.currentPin !== savedPin) {
+            setPinMessage({ type: 'error', text: 'El PIN actual es incorrecto.' });
+            return;
+        }
+
+        localStorage.setItem(`pin_${selectedUserForPin}`, pinForm.newPin);
+        setPinMessage({ type: 'success', text: `PIN de ${selectedUserForPin} actualizado con éxito.` });
+        setPinForm({ currentPin: '', newPin: '', confirmPin: '' });
+    };
+
     const handleSaveAll = () => {
         if (!isShareValid) {
             alert("Error: El total de participación debe ser exactamente 100%");
@@ -67,18 +85,12 @@ export default function Configuracion({ onSave, initialPartners }: Configuracion
         }
 
         setLoading(true);
-        localStorage.setItem('supabase_url', supabaseUrl);
-        localStorage.setItem('supabase_key', supabaseKey);
         
-        // Simulación de guardado seguro
         setTimeout(() => {
             setLoading(false);
             setSuccess(true);
-            onSave({ 
-                credentials, 
-                partners, 
-                supabase: { url: supabaseUrl, key: supabaseKey } 
-            });
+            // ENVIAMOS LA META PARA GUARDARLA
+            onSave({ partners, whatsappTemplate, mrrTarget }); 
             setTimeout(() => setSuccess(false), 3000);
         }, 800);
     };
@@ -87,9 +99,9 @@ export default function Configuracion({ onSave, initialPartners }: Configuracion
         <div className="max-w-5xl mx-auto space-y-8 animate-in fade-in duration-500 pb-10">
             <div>
                  <h2 className="text-2xl font-bold text-white flex items-center gap-2">
-                    <Settings className="text-indigo-500" /> Configuración Integral
+                    <Settings className="text-indigo-500" /> Centro de Configuración
                  </h2>
-                 <p className="text-zinc-400 font-mono text-sm mt-1 opacity-80">{'>'} Administración de socios, seguridad y base de datos.</p>
+                 <p className="text-zinc-400 font-mono text-sm mt-1 opacity-80">{'>'} Administración de socios, seguridad y métricas.</p>
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
@@ -101,10 +113,9 @@ export default function Configuracion({ onSave, initialPartners }: Configuracion
                             <div className="p-2 bg-emerald-500/10 rounded-lg"><PieChart className="text-emerald-500" size={20} /></div>
                             <div>
                                 <h3 className="text-lg font-bold text-white">Socios & Dividendos</h3>
-                                <p className="text-xs text-zinc-500">Definición de estructura societaria.</p>
+                                <p className="text-xs text-zinc-500">Estructura para el Control de Flujo.</p>
                             </div>
                         </div>
-                        {/* Indicador de Total % */}
                         <div className={`px-3 py-1 rounded-full text-xs font-bold border transition-colors flex items-center gap-2 ${isShareValid ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'bg-red-500/10 text-red-400 border-red-500/20 animate-pulse'}`}>
                             {!isShareValid && <AlertTriangle size={12} />}
                             Total: {totalShares}%
@@ -114,13 +125,11 @@ export default function Configuracion({ onSave, initialPartners }: Configuracion
                     <div className="space-y-3 flex-1">
                         {partners.map((partner) => (
                             <div key={partner.id} className="flex items-center gap-3 bg-zinc-950/50 p-3 rounded-lg border border-zinc-800 hover:border-zinc-700 transition-colors">
-                                {/* Avatar con Iniciales */}
                                 <div className="w-10 h-10 rounded-full bg-gradient-to-br from-zinc-800 to-zinc-900 flex items-center justify-center text-sm font-bold text-zinc-300 border border-zinc-700 shrink-0 shadow-inner">
                                     {partner.name.substring(0,2).toUpperCase()}
                                 </div>
 
                                 {editingId === partner.id && tempPartner ? (
-                                    // --- MODO EDICIÓN ---
                                     <div className="flex-1 flex gap-2 items-center animate-in fade-in duration-200">
                                         <div className="flex-1 space-y-1">
                                             <input 
@@ -132,7 +141,7 @@ export default function Configuracion({ onSave, initialPartners }: Configuracion
                                             />
                                             <input 
                                                 className="w-full bg-zinc-900 border border-zinc-700 text-zinc-400 text-xs rounded px-2 py-1 focus:outline-none focus:border-indigo-500"
-                                                placeholder="Rol (ej. Gerente)"
+                                                placeholder="Rol"
                                                 value={tempPartner.role}
                                                 onChange={(e) => setTempPartner({...tempPartner, role: e.target.value})}
                                             />
@@ -152,21 +161,16 @@ export default function Configuracion({ onSave, initialPartners }: Configuracion
                                         </div>
                                     </div>
                                 ) : (
-                                    // --- MODO VISUALIZACIÓN ---
                                     <>
                                         <div className="flex-1">
                                             <p className="text-sm font-bold text-zinc-200">{partner.name}</p>
                                             <p className="text-[10px] text-zinc-500 uppercase tracking-wide font-medium">{partner.role}</p>
                                         </div>
-                                        
-                                        {/* Badge de Porcentaje */}
                                         <div className="flex flex-col items-end mr-2">
                                             <div className="font-mono text-white font-bold text-sm bg-zinc-900 px-2 py-1 rounded border border-zinc-800 min-w-[3rem] text-center shadow-sm">
                                                 {partner.share}%
                                             </div>
                                         </div>
-
-                                        {/* Botones de Acción (Solo Editar) */}
                                         <div className="flex gap-1 border-l border-zinc-800 pl-2">
                                             <button onClick={() => startEditing(partner)} className="text-zinc-500 hover:text-indigo-400 p-1.5 rounded-lg hover:bg-zinc-800 transition-colors" title="Editar datos"><Edit2 size={16} /></button>
                                         </div>
@@ -176,61 +180,136 @@ export default function Configuracion({ onSave, initialPartners }: Configuracion
                         ))}
                     </div>
 
-                    <div className="mt-4 p-3 bg-zinc-950/50 rounded-lg border border-zinc-800 text-xs text-zinc-500 text-center">
-                        <p>Solo se permiten 2 socios principales en este plan.</p>
+                    {/* NUEVO: META FINANCIERA (Debajo de los socios) */}
+                    <div className="mt-6 pt-4 border-t border-zinc-800">
+                        <label className="text-[10px] font-black text-emerald-500 uppercase tracking-widest flex items-center gap-2 mb-2">
+                            <Target size={12} /> Meta de Ingresos Mensual (MRR Target)
+                        </label>
+                        <div className="relative">
+                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500 font-bold">$</span>
+                            <input 
+                                type="number" 
+                                value={mrrTarget}
+                                onChange={(e) => setMrrTarget(Number(e.target.value))}
+                                className="w-full bg-zinc-950 border border-zinc-800 text-white text-sm rounded-lg pl-8 pr-4 py-3 focus:border-emerald-500 focus:outline-none transition-colors font-mono" 
+                            />
+                        </div>
+                        <p className="text-[10px] text-zinc-500 mt-2">Esta meta se reflejará en la barra de progreso de la pestaña Métricas.</p>
                     </div>
                 </div>
 
-                {/* 2. CREDENCIALES (Seguridad) */}
+                {/* 2. SEGURIDAD DE ACCESOS */}
                 <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6 shadow-lg">
                     <div className="flex items-center gap-3 mb-6 pb-4 border-b border-zinc-800">
                         <div className="p-2 bg-indigo-500/10 rounded-lg"><Shield className="text-indigo-500" size={20} /></div>
                         <div>
-                            <h3 className="text-lg font-bold text-white">Credenciales Maestras</h3>
-                            <p className="text-xs text-zinc-500">Acceso administrativo del sistema.</p>
+                            <h3 className="text-lg font-bold text-white">Seguridad de Acceso</h3>
+                            <p className="text-xs text-zinc-500">Gestión de PINs de los operadores.</p>
                         </div>
                     </div>
-                    <div className="space-y-5">
+
+                    <div className="space-y-4">
                         <div>
-                            <label className="text-xs font-bold text-zinc-500 uppercase mb-1.5 flex items-center gap-2"><User size={12} /> Usuario Principal</label>
-                            <input type="text" value={credentials.username} onChange={(e) => setCredentials({...credentials, username: e.target.value})} className="w-full bg-zinc-950 border border-zinc-700 text-white text-sm rounded-lg px-3 py-2.5 focus:border-indigo-500 focus:outline-none transition-colors" />
+                            <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest flex items-center gap-2 mb-1.5">
+                                <User size={12} /> Modificar PIN para
+                            </label>
+                            <select 
+                                value={selectedUserForPin}
+                                onChange={(e) => {
+                                    setSelectedUserForPin(e.target.value);
+                                    setPinMessage({ type: '', text: '' });
+                                }}
+                                className="w-full bg-zinc-950 border border-zinc-700 text-white text-sm rounded-lg px-3 py-3 focus:border-indigo-500 focus:outline-none transition-colors appearance-none cursor-pointer"
+                            >
+                                <option value="Rodrigo">👤 Rodrigo</option>
+                                <option value="Tomy">👤 Tomy</option>
+                            </select>
                         </div>
+
+                        <div>
+                            <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest mb-1.5 flex items-center gap-2">
+                                PIN Actual
+                            </label>
+                            <input 
+                                type="password" 
+                                placeholder="••••"
+                                value={pinForm.currentPin} 
+                                onChange={(e) => setPinForm({...pinForm, currentPin: e.target.value})} 
+                                className="w-full bg-zinc-950 border border-zinc-700 text-white text-sm rounded-lg px-3 py-2.5 focus:border-indigo-500 focus:outline-none transition-colors text-center tracking-[0.5em]" 
+                            />
+                        </div>
+
                         <div className="grid grid-cols-2 gap-4">
-                            <div><label className="text-xs font-bold text-zinc-500 uppercase mb-1.5">Contraseña Actual</label><input type="password" value={credentials.currentPassword} onChange={(e) => setCredentials({...credentials, currentPassword: e.target.value})} className="w-full bg-zinc-950 border border-zinc-700 text-white text-sm rounded-lg px-3 py-2.5 focus:border-indigo-500 focus:outline-none transition-colors" /></div>
-                            <div><label className="text-xs font-bold text-zinc-500 uppercase mb-1.5">Nueva Contraseña</label><input type="password" value={credentials.newPassword} onChange={(e) => setCredentials({...credentials, newPassword: e.target.value})} className="w-full bg-zinc-950 border border-zinc-700 text-white text-sm rounded-lg px-3 py-2.5 focus:border-indigo-500 focus:outline-none transition-colors" /></div>
+                            <div>
+                                <label className="text-[10px] font-black text-emerald-500 uppercase tracking-widest mb-1.5 flex items-center gap-2">Nuevo PIN</label>
+                                <input 
+                                    type="password" 
+                                    placeholder="••••"
+                                    value={pinForm.newPin} 
+                                    onChange={(e) => setPinForm({...pinForm, newPin: e.target.value})} 
+                                    className="w-full bg-zinc-950 border border-emerald-500/50 text-white text-sm rounded-lg px-3 py-2.5 focus:border-emerald-500 focus:outline-none transition-colors text-center tracking-[0.5em]" 
+                                />
+                            </div>
+                            <div>
+                                <label className="text-[10px] font-black text-emerald-500 uppercase tracking-widest mb-1.5 flex items-center gap-2">Confirmar</label>
+                                <input 
+                                    type="password" 
+                                    placeholder="••••"
+                                    value={pinForm.confirmPin} 
+                                    onChange={(e) => setPinForm({...pinForm, confirmPin: e.target.value})} 
+                                    className="w-full bg-zinc-950 border border-emerald-500/50 text-white text-sm rounded-lg px-3 py-2.5 focus:border-emerald-500 focus:outline-none transition-colors text-center tracking-[0.5em]" 
+                                />
+                            </div>
+                        </div>
+
+                        {pinMessage.text && (
+                            <div className={`p-3 rounded-lg text-xs font-bold flex items-center gap-2 ${pinMessage.type === 'error' ? 'bg-rose-500/10 text-rose-400 border border-rose-500/20' : 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'}`}>
+                                {pinMessage.type === 'error' ? <AlertTriangle size={14} /> : <CheckCircle2 size={14} />}
+                                {pinMessage.text}
+                            </div>
+                        )}
+
+                        <button 
+                            onClick={handleUpdatePin}
+                            className="w-full bg-zinc-800 hover:bg-zinc-700 text-white text-sm font-bold py-3 rounded-xl transition-colors flex items-center justify-center gap-2 mt-2"
+                        >
+                            <Key size={16} /> ACTUALIZAR PIN
+                        </button>
+                    </div>
+                </div>
+
+                {/* 3. COMUNICACIONES (WhatsApp) */}
+                <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6 shadow-lg lg:col-span-2">
+                    <div className="flex items-center gap-3 mb-6 pb-4 border-b border-zinc-800">
+                        <div className="p-2 bg-emerald-500/10 rounded-lg"><MessageCircle className="text-emerald-500" size={20} /></div>
+                        <div>
+                            <h3 className="text-lg font-bold text-white">Plantilla de WhatsApp</h3>
+                            <p className="text-xs text-zinc-500">Mensaje automático para contactar clientes rápidamente.</p>
+                        </div>
+                    </div>
+                    <div className="space-y-4">
+                        <div className="bg-zinc-950 p-5 rounded-xl border border-zinc-800">
+                            <p className="text-[10px] text-zinc-400 mb-3 font-black uppercase tracking-widest">Variables Dinámicas (Haz clic para copiar o escríbelas):</p>
+                            <div className="flex gap-2 mb-4 flex-wrap">
+                                <span className="px-2 py-1 bg-zinc-800/50 rounded-lg text-xs font-bold text-indigo-400 border border-zinc-700 select-all">{'{nombre}'}</span>
+                                <span className="px-2 py-1 bg-zinc-800/50 rounded-lg text-xs font-bold text-emerald-400 border border-zinc-700 select-all">{'{plan}'}</span>
+                                <span className="px-2 py-1 bg-zinc-800/50 rounded-lg text-xs font-bold text-amber-400 border border-zinc-700 select-all">{'{estado}'}</span>
+                            </div>
+                            <textarea 
+                                value={whatsappTemplate}
+                                onChange={(e) => setWhatsappTemplate(e.target.value)}
+                                className="w-full h-24 bg-zinc-900 border border-zinc-700 text-white text-sm rounded-lg px-4 py-3 focus:border-emerald-500 focus:outline-none transition-colors resize-none leading-relaxed"
+                                placeholder="Escribe tu mensaje aquí... Ej: Hola {nombre}, tu plan {plan} está en estado {estado}."
+                            />
                         </div>
                     </div>
                 </div>
             </div>
 
-            {/* 3. CONEXIÓN BASE DE DATOS (Supabase) */}
-            <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-8 shadow-sm relative overflow-hidden group">
-                <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-500/5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2 pointer-events-none group-hover:bg-indigo-500/10 transition-colors duration-500"></div>
-                <div className="flex items-center gap-3 mb-6 relative z-10">
-                    <div className="p-2 bg-indigo-500/10 rounded-lg"><Database className="text-indigo-500" size={20} /></div>
-                    <div>
-                        <h3 className="text-lg font-bold text-white">Base de Datos (Nube)</h3>
-                        <p className="text-xs text-zinc-500">Configuración de conexión persistente.</p>
-                    </div>
-                </div>
-                <div className="space-y-6 relative z-10">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <div>
-                            <label className="block text-sm font-medium text-zinc-300 mb-2">Supabase URL</label>
-                            <input type="text" value={supabaseUrl} onChange={(e) => setSupabaseUrl(e.target.value)} className="w-full bg-zinc-950 border border-zinc-700 rounded-lg py-2.5 px-4 text-zinc-200 focus:border-indigo-500 focus:outline-none transition-colors" placeholder="https://xyz.supabase.co" />
-                        </div>
-                        <div>
-                            <label className="block text-sm font-medium text-zinc-300 mb-2">Supabase Anon Key</label>
-                            <input type="password" value={supabaseKey} onChange={(e) => setSupabaseKey(e.target.value)} className="w-full bg-zinc-950 border border-zinc-700 rounded-lg py-2.5 px-4 text-zinc-200 font-mono focus:border-indigo-500 focus:outline-none transition-colors" />
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            {/* BOTÓN FLOTANTE DE GUARDADO */}
+            {/* BOTÓN FLOTANTE DE GUARDADO GENERAL */}
             <div className="flex justify-end pt-4 sticky bottom-6 z-20">
                 <button onClick={handleSaveAll} disabled={loading} className={`flex items-center gap-2 px-8 py-3 rounded-xl font-bold text-sm shadow-xl transition-all transform hover:scale-[1.02] border ${success ? 'bg-emerald-600 border-emerald-500 text-white' : 'bg-white border-white text-black hover:bg-zinc-200'}`}>
-                    {loading ? 'Guardando...' : success ? <><CheckCircle2 size={18} /> ¡Cambios Guardados!</> : <><Save size={18} /> Guardar Configuración</>}
+                    {loading ? 'Guardando...' : success ? <><CheckCircle2 size={18} /> ¡Configuración Guardada!</> : <><Save size={18} /> Guardar Cambios Generales</>}
                 </button>
             </div>
         </div>

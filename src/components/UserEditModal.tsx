@@ -1,38 +1,52 @@
 import { useState, useEffect } from 'react';
-import { X, Calendar, Save, Building2, CreditCard, Trash2, Package } from 'lucide-react';
+import { X, Calendar, Save, Building2, CreditCard, Trash2, Package, Phone } from 'lucide-react';
 import type { DashboardUser } from '../types';
 
 interface UserEditModalProps {
     isOpen: boolean;
     onClose: () => void;
     user: DashboardUser | null;
-    onSave: (userId: string, newStatus: string, trialEndsAt: string, currentPeriodEnd: string, cicloDePago: string, sucursalesExtra: number, plan: string) => void;
+    onSave: (userId: string, newStatus: string, trialEndsAt: string, currentPeriodEnd: string, cicloDePago: string, sucursalesExtra: number, plan: string, telefono: string) => void;
     onDelete: (userId: string) => void;
 }
 
 export default function UserEditModal({ isOpen, onClose, user, onSave, onDelete }: UserEditModalProps) {
     const [status, setStatus] = useState('');
     const [trialDate, setTrialDate] = useState('');
-    const [periodEnd, setPeriodEnd] = useState(''); // NUEVO ESTADO PARA SUSCRIPCIÓN
+    const [periodEnd, setPeriodEnd] = useState('');
     const [ciclo, setCiclo] = useState('mensual');
     const [sucursales, setSucursales] = useState(0);
     const [plan, setPlan] = useState('Estandar');
+    const [telefono, setTelefono] = useState(''); // NUEVO ESTADO
 
     useEffect(() => {
         if (user) {
             setStatus(user.subscriptionStatus);
-            // Formatear Fecha Trial
             const tDate = user.trialEndsAt ? new Date(user.trialEndsAt).toISOString().split('T')[0] : '';
             setTrialDate(tDate);
-            // Formatear Fecha Suscripción
             const pDate = user.currentPeriodEnd ? new Date(user.currentPeriodEnd).toISOString().split('T')[0] : '';
             setPeriodEnd(pDate);
-
             setCiclo(user.cicloDePago || 'mensual');
             setSucursales(user.sucursalesExtra || 0);
             setPlan(user.plan || 'Estandar');
+            setTelefono(user.telefono || ''); // CARGAMOS EL TELÉFONO
         }
     }, [user]);
+
+    const handleCicloChange = (nuevoCiclo: string) => {
+        setCiclo(nuevoCiclo);
+        setStatus('active');
+        setTrialDate('');
+        const fecha = new Date();
+        if (nuevoCiclo === 'mensual') {
+            fecha.setMonth(fecha.getMonth() + 1);
+        } else if (nuevoCiclo === 'semestral') {
+            fecha.setMonth(fecha.getMonth() + 6);
+        } else if (nuevoCiclo === 'anual') {
+            fecha.setFullYear(fecha.getFullYear() + 1);
+        }
+        setPeriodEnd(fecha.toISOString().split('T')[0]);
+    };
 
     if (!isOpen || !user) return null;
 
@@ -50,39 +64,53 @@ export default function UserEditModal({ isOpen, onClose, user, onSave, onDelete 
                 </div>
 
                 <div className="p-6 space-y-5 overflow-y-auto">
-                    <div className="space-y-2">
-                        <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest flex items-center gap-2">
-                            <Package size={12} className="text-indigo-500" /> Plan Asignado
-                        </label>
-                        <select 
-                            value={plan}
-                            onChange={(e) => setPlan(e.target.value)}
-                            className="w-full bg-zinc-950 border border-zinc-800 rounded-xl py-3 px-4 text-sm text-white focus:border-indigo-500 outline-none transition-all appearance-none cursor-pointer"
-                        >
-                            <option value="Free">Free</option>
-                            <option value="Estandar">Estándar</option>
-                            <option value="Multisede">Multisede</option>
-                            <option value="Premium AI">Premium AI</option>
-                        </select>
+                    <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                            <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest flex items-center gap-2">
+                                <Package size={12} className="text-indigo-500" /> Plan
+                            </label>
+                            <select 
+                                value={plan}
+                                onChange={(e) => setPlan(e.target.value)}
+                                className="w-full bg-zinc-950 border border-zinc-800 rounded-xl py-3 px-4 text-sm text-white focus:border-indigo-500 outline-none transition-all appearance-none cursor-pointer"
+                            >
+                                <option value="Free">Free</option>
+                                <option value="Estandar">Estándar</option>
+                                <option value="Multisede">Multisede</option>
+                                <option value="Premium AI">Premium AI</option>
+                            </select>
+                        </div>
+                        <div className="space-y-2">
+                            <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest flex items-center gap-2">
+                                Estado
+                            </label>
+                            <select 
+                                value={status}
+                                onChange={(e) => setStatus(e.target.value)}
+                                className="w-full bg-zinc-950 border border-zinc-800 rounded-xl py-3 px-4 text-sm text-white focus:border-indigo-500 outline-none transition-all appearance-none cursor-pointer"
+                            >
+                                <option value="active">ACTIVO</option>
+                                <option value="trialing">PRUEBA</option>
+                                <option value="expired">EXPIRADO</option>
+                            </select>
+                        </div>
                     </div>
 
+                    {/* NUEVO: INPUT DE TELÉFONO */}
                     <div className="space-y-2">
                         <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest flex items-center gap-2">
-                            Estado de Cuenta
+                            <Phone size={12} className="text-indigo-500" /> WhatsApp / Teléfono
                         </label>
-                        <select 
-                            value={status}
-                            onChange={(e) => setStatus(e.target.value)}
-                            className="w-full bg-zinc-950 border border-zinc-800 rounded-xl py-3 px-4 text-sm text-white focus:border-indigo-500 outline-none transition-all appearance-none cursor-pointer"
-                        >
-                            <option value="active">ACTIVE (ACTIVO)</option>
-                            <option value="trialing">TRIALING (EN PRUEBA)</option>
-                            <option value="expired">EXPIRED (EXPIRADO)</option>
-                        </select>
+                        <input 
+                            type="tel"
+                            value={telefono}
+                            onChange={(e) => setTelefono(e.target.value)}
+                            placeholder="Ej: +54 9 11 1234-5678"
+                            className="w-full bg-zinc-950 border border-zinc-800 rounded-xl py-3 px-4 text-sm text-white focus:border-indigo-500 outline-none transition-all"
+                        />
                     </div>
 
                     <div className="grid grid-cols-2 gap-4">
-                        {/* Selector de Trial */}
                         <div className="space-y-2">
                             <label className="text-[10px] font-black text-amber-500 uppercase tracking-widest flex items-center gap-2">
                                 <Calendar size={12} /> Fin de Trial
@@ -94,7 +122,6 @@ export default function UserEditModal({ isOpen, onClose, user, onSave, onDelete 
                                 className="w-full bg-zinc-950 border border-zinc-800 rounded-xl py-3 px-3 text-xs text-white focus:border-amber-500 outline-none transition-all scheme-dark"
                             />
                         </div>
-                        {/* Selector de Suscripción (NUEVO) */}
                         <div className="space-y-2">
                             <label className="text-[10px] font-black text-emerald-500 uppercase tracking-widest flex items-center gap-2">
                                 <Calendar size={12} /> Fin Suscripción
@@ -116,7 +143,7 @@ export default function UserEditModal({ isOpen, onClose, user, onSave, onDelete 
                         </label>
                         <select 
                             value={ciclo}
-                            onChange={(e) => setCiclo(e.target.value)}
+                            onChange={(e) => handleCicloChange(e.target.value)}
                             className="w-full bg-zinc-950 border border-zinc-800 rounded-xl py-3 px-4 text-sm text-white focus:border-indigo-500 outline-none transition-all appearance-none cursor-pointer"
                         >
                             <option value="mensual">Mensual ($30.000)</option>
@@ -157,7 +184,7 @@ export default function UserEditModal({ isOpen, onClose, user, onSave, onDelete 
                             CANCELAR
                         </button>
                         <button 
-                            onClick={() => onSave(user.id, status, trialDate, periodEnd, ciclo, sucursales, plan)}
+                            onClick={() => onSave(user.id, status, trialDate, periodEnd, ciclo, sucursales, plan, telefono)} // ENVIAMOS EL TELÉFONO
                             className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2 rounded-xl text-sm font-bold flex items-center gap-2 transition-all shadow-lg shadow-indigo-500/10"
                         >
                             <Save size={16} /> GUARDAR

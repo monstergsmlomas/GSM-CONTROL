@@ -9,9 +9,10 @@ export interface DashboardUser {
   subscriptionStatus: 'active' | 'trialing' | 'expired';
   plan: 'Estandar' | 'Multisede' | 'Premium AI' | 'Free';
   trialEndsAt: string | null;
-  cicloDePago?: 'mensual' | 'semestral' | 'anual'; // Añadido opcional para compatibilidad hacia atrás
-  sucursalesExtra?: number; // Añadido opcional
+  cicloDePago?: 'mensual' | 'semestral' | 'anual';
+  sucursalesExtra?: number;
   currentPeriodEnd?: string | null;
+  telefono?: string; // NUEVO CAMPO
 }
 
 export interface AuditLog {
@@ -30,6 +31,5 @@ export interface Partner {
   share: number;
 }
 
-// 3. Mock Data (Eliminados para usar base de datos real)
 export const MOCK_USERS: DashboardUser[] = [];
 export const MOCK_LOGS: AuditLog[] = [];

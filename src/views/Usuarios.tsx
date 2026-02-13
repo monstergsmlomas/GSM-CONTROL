@@ -11,10 +11,12 @@ interface UsuariosProps {
     users: DashboardUser[];
     isLoading: boolean;
     onRefresh: () => void;
-    onUpdateStatus: (data: { userId: string, newStatus: 'active' | 'trialing' | 'expired', trialEndsAt?: string, currentPeriodEnd?: string, cicloDePago?: string, sucursalesExtra?: number, plan?: string }) => void;
+    // AQUÍ ESTÁ LA CORRECCIÓN: Agregamos telefono?: string al final
+    onUpdateStatus: (data: { userId: string, newStatus: 'active' | 'trialing' | 'expired', trialEndsAt?: string, currentPeriodEnd?: string, cicloDePago?: string, sucursalesExtra?: number, plan?: string, telefono?: string }) => void;
     onToggleStatus: (userId: string) => void;
     onCycleStatus: (userId: string) => void;
     onDeleteUser: (userId: string) => void;
+    whatsappTemplate: string;
 }
 
 const StatusBadge = ({ status }: { status: string }) => {
@@ -45,7 +47,7 @@ const PlanBadge = ({ plan }: { plan: string }) => {
     );
 };
 
-const Usuarios = ({ users, isLoading, onRefresh, onUpdateStatus, onToggleStatus, onCycleStatus, onDeleteUser }: UsuariosProps) => {
+const Usuarios = ({ users, isLoading, onRefresh, onUpdateStatus, onToggleStatus, onCycleStatus, onDeleteUser, whatsappTemplate }: UsuariosProps) => {
     const [searchTerm, setSearchTerm] = useState('');
     const [filterStatus, setFilterStatus] = useState('Todos');
     const [editingUser, setEditingUser] = useState<DashboardUser | null>(null);
@@ -58,8 +60,17 @@ const Usuarios = ({ users, isLoading, onRefresh, onUpdateStatus, onToggleStatus,
     });
 
     const handleWhatsApp = (user: DashboardUser) => {
-        const text = `Hola ${user.nombre}, Soporte GSM-FIX te contacta. Tu estado es: ${user.subscriptionStatus}.`;
-        window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
+        let text = whatsappTemplate
+            .replace(/{nombre}/g, user.nombre)
+            .replace(/{plan}/g, user.plan || 'Free')
+            .replace(/{estado}/g, user.subscriptionStatus.toUpperCase());
+            
+        if (user.telefono) {
+            const numeroLimpio = user.telefono.replace(/\D/g, '');
+            window.open(`https://wa.me/${numeroLimpio}?text=${encodeURIComponent(text)}`, '_blank');
+        } else {
+            window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
+        }
     };
 
     const getUrgencyClass = (expiryDate: string | null) => {
@@ -81,18 +92,17 @@ const Usuarios = ({ users, isLoading, onRefresh, onUpdateStatus, onToggleStatus,
                 isOpen={!!editingUser} 
                 onClose={() => setEditingUser(null)} 
                 user={editingUser}
-                onSave={(id, status, trialDate, periodEnd, ciclo, sucursales, plan) => {
+                onSave={(id, status, trialDate, periodEnd, ciclo, sucursales, plan, telefono) => {
                     onUpdateStatus({ 
                         userId: id, 
                         newStatus: status as any, 
-                        // Enviamos la fecha solo si no está vacía, para no enojar a la base de datos
                         trialEndsAt: trialDate || undefined,
                         currentPeriodEnd: periodEnd || undefined, 
                         cicloDePago: ciclo,
                         sucursalesExtra: sucursales,
-                        plan: plan 
+                        plan: plan,
+                        telefono: telefono 
                     });
-                    // LA MAGIA: Cierra la ventana automáticamente al hacer clic en Guardar
                     setEditingUser(null);
                 }}
                 onDelete={(id) => {
@@ -187,12 +197,10 @@ const Usuarios = ({ users, isLoading, onRefresh, onUpdateStatus, onToggleStatus,
                                         </td>
                                         <td className="px-6 py-4">
                                             <div className="space-y-1">
-                                                {/* Fecha de Suscripción Paga */}
                                                 <div className={`flex items-center gap-2 font-mono text-[10px] ${user.subscriptionStatus === 'active' ? 'text-emerald-400' : 'text-zinc-500'}`}>
                                                     <CreditCard size={12} className={user.subscriptionStatus === 'active' ? 'text-emerald-500' : 'text-zinc-600'} />
                                                     Susc: {user.currentPeriodEnd ? new Date(user.currentPeriodEnd).toLocaleDateString() : 'N/A'}
                                                 </div>
-                                                {/* Fecha de Trial */}
                                                 <div className={`flex items-center gap-2 font-mono text-[10px] ${user.subscriptionStatus === 'trialing' ? 'text-amber-400' : 'text-zinc-500'}`}>
                                                     <Calendar size={12} className={user.subscriptionStatus === 'trialing' ? 'text-amber-500' : 'text-zinc-600'} />
                                                     Trial: {user.trialEndsAt ? new Date(user.trialEndsAt).toLocaleDateString() : 'N/A'}
@@ -204,7 +212,7 @@ const Usuarios = ({ users, isLoading, onRefresh, onUpdateStatus, onToggleStatus,
                                                 <button 
                                                     onClick={() => handleWhatsApp(user)} 
                                                     className="p-2 hover:bg-emerald-500/10 text-emerald-500 rounded-lg transition-all" 
-                                                    title="Enviar WhatsApp"
+                                                    title="Enviar WhatsApp Automático"
                                                 >
                                                     <MessageCircle size={16} />
                                                 </button>

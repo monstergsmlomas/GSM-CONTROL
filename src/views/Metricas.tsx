@@ -1,13 +1,14 @@
 import {
     Zap,
     BarChart3,
-    PieChart,
+    PieChart as PieChartIcon, // Renombrado para no chocar con recharts
     Users,
     Activity,
     ShieldCheck,
     Clock,
     CreditCard,
-    TrendingUp
+    TrendingUp,
+    Target // NUEVO ICONO
 } from 'lucide-react';
 import {
     PieChart as RePieChart,
@@ -24,13 +25,12 @@ const PLAN_COLORS = ['#6366f1', '#8b5cf6', '#3b82f6', '#71717a'];
 
 interface MetricsPanelProps {
     users: DashboardUser[];
+    mrrTarget: number; // NUEVA PROP
 }
 
-const MetricsPanel = ({ users }: MetricsPanelProps) => {
+const MetricsPanel = ({ users, mrrTarget }: MetricsPanelProps) => {
 
-    // --- 1. ESTADÍSTICAS DINÁMICAS ---
     const totalUsers = users.length;
-
     const activeUsers = users.filter(u => u.subscriptionStatus === 'active').length;
     const trialingUsers = users.filter(u => u.subscriptionStatus === 'trialing').length;
     const expiredUsers = users.filter(u => u.subscriptionStatus === 'expired').length;
@@ -52,12 +52,11 @@ const MetricsPanel = ({ users }: MetricsPanelProps) => {
         value: planCounts[key]
     }));
 
-    // --- 2. CÁLCULO FINANCIERO EXACTO (MRR) ---
+    // --- CÁLCULO FINANCIERO EXACTO (MRR) ---
     let calculatedMRR = 0;
     let activePayingUsers = 0;
 
     users.forEach(user => {
-        // Solo sumamos dinero de los usuarios con estado "active"
         if (user.subscriptionStatus === 'active') {
             let baseMensual = 0;
             const sucursales = user.sucursalesExtra || 0;
@@ -66,40 +65,43 @@ const MetricsPanel = ({ users }: MetricsPanelProps) => {
             if (user.plan === 'Estandar' || user.plan === 'Multisede') {
                 activePayingUsers++;
                 
-                // Calculamos el valor mensual según el ciclo elegido
                 if (user.cicloDePago === 'semestral') {
                     baseMensual = 160000 / 6;
                 } else if (user.cicloDePago === 'anual') {
                     baseMensual = 300000 / 12;
                 } else {
-                    baseMensual = 30000; // mensual por defecto
+                    baseMensual = 30000; 
                 }
 
-                // Sumamos los extras si es Multisede
                 if (user.plan === 'Multisede') {
                     baseMensual += costoSucursales;
                 }
             }
-            
-            // Nota: Si luego defines precio para "Premium AI", lo agregaremos aquí.
-
             calculatedMRR += baseMensual;
         }
     });
     
-    // Formateador de moneda argentina
     const formattedMRR = new Intl.NumberFormat('es-AR', { 
         style: 'currency', 
         currency: 'ARS', 
         maximumFractionDigits: 0 
     }).format(calculatedMRR);
 
+    const formattedTarget = new Intl.NumberFormat('es-AR', { 
+        style: 'currency', 
+        currency: 'ARS', 
+        maximumFractionDigits: 0 
+    }).format(mrrTarget);
+
+    // CALCULAR PORCENTAJE DE LA BARRA DE PROGRESO
+    const progressPercentage = mrrTarget > 0 ? Math.min((calculatedMRR / mrrTarget) * 100, 100) : 0;
+
     return (
         <div className="space-y-6 animate-in fade-in duration-500 pb-10">
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                 <div>
                     <h2 className="text-2xl font-bold text-white flex items-center gap-2">
-                        <PieChart className="text-indigo-500" />
+                        <PieChartIcon className="text-indigo-500" />
                         Panel de Control de Usuarios
                     </h2>
                     <p className="text-zinc-400 font-mono text-sm mt-1 opacity-80">{'>'} Estado de suscripciones y salud financiera.</p>
@@ -109,18 +111,44 @@ const MetricsPanel = ({ users }: MetricsPanelProps) => {
             {/* TARJETA FINANCIERA PRINCIPAL */}
             <div className="bg-zinc-900 border border-indigo-500/30 p-6 rounded-2xl ring-1 ring-indigo-500/10 relative overflow-hidden">
                 <div className="absolute top-0 right-0 p-4 opacity-5">
-                    <TrendingUp size={80} className="text-indigo-500" />
+                    <TrendingUp size={100} className="text-indigo-500" />
                 </div>
-                <p className="text-indigo-400 text-xs font-bold uppercase tracking-widest flex items-center gap-2">
-                    <CreditCard size={14} /> Ingreso Mensual Recurrente (MRR Exacto)
-                </p>
-                <div className="flex items-baseline gap-2 mt-2">
-                    <h3 className="text-4xl font-mono font-bold text-white">{formattedMRR}</h3>
-                    <span className="text-zinc-500 text-sm font-bold uppercase">ARS / Mes</span>
+                
+                <div className="flex justify-between items-start relative z-10">
+                    <div>
+                        <p className="text-indigo-400 text-xs font-bold uppercase tracking-widest flex items-center gap-2">
+                            <CreditCard size={14} /> Ingreso Mensual Recurrente (MRR Exacto)
+                        </p>
+                        <div className="flex items-baseline gap-2 mt-2">
+                            <h3 className="text-4xl md:text-5xl font-mono font-bold text-white">{formattedMRR}</h3>
+                            <span className="text-zinc-500 text-sm font-bold uppercase">ARS / Mes</span>
+                        </div>
+                        <p className="text-zinc-500 text-[10px] mt-2 font-mono max-w-lg">
+                            *Basado en {activePayingUsers} usuarios activos. Los pagos semestrales/anuales se dividen proporcionalmente. Incluye extra por sucursales.
+                        </p>
+                    </div>
+
+                    <div className="text-right hidden md:block">
+                        <p className="text-emerald-500/70 text-xs font-bold uppercase tracking-widest flex items-center justify-end gap-1 mb-1">
+                            <Target size={12} /> Meta Actual
+                        </p>
+                        <p className="text-xl font-mono font-bold text-zinc-300">{formattedTarget}</p>
+                    </div>
                 </div>
-                <p className="text-zinc-500 text-[10px] mt-2 font-mono">
-                    *Basado en {activePayingUsers} usuarios activos. Los pagos semestrales y anuales se dividen proporcionalmente por mes. Incluye extra por sucursales.
-                </p>
+
+                {/* BARRA DE PROGRESO DE LA META */}
+                <div className="mt-8 relative z-10">
+                    <div className="flex justify-between text-[10px] font-bold uppercase tracking-wider mb-2">
+                        <span className="text-indigo-400">Progreso: {progressPercentage.toFixed(1)}%</span>
+                        <span className="text-zinc-500 md:hidden">Meta: {formattedTarget}</span>
+                    </div>
+                    <div className="w-full bg-zinc-950 h-3 rounded-full overflow-hidden border border-zinc-800">
+                        <div 
+                            className="h-full bg-gradient-to-r from-indigo-500 to-emerald-500 rounded-full transition-all duration-1000 ease-out"
+                            style={{ width: `${progressPercentage}%` }}
+                        ></div>
+                    </div>
+                </div>
             </div>
 
             {/* KPI CARDS */}
@@ -144,7 +172,6 @@ const MetricsPanel = ({ users }: MetricsPanelProps) => {
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                {/* Gráfico de Estados */}
                 <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6">
                     <h3 className="text-lg font-bold text-white mb-6 flex items-center gap-2">
                         <Activity size={18} className="text-emerald-500" /> Estado de Suscripciones
@@ -174,7 +201,6 @@ const MetricsPanel = ({ users }: MetricsPanelProps) => {
                     </div>
                 </div>
 
-                {/* Gráfico de Planes */}
                 <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6">
                     <h3 className="text-lg font-bold text-white mb-6 flex items-center gap-2">
                         <Users size={18} className="text-indigo-500" /> Distribución por Plan

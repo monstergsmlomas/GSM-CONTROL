@@ -1,11 +1,7 @@
 --- DIAGNÓSTICO PROFUNDO ---
 ¡Conexión exitosa!
 Tablas 'users' encontradas:
-Schema [auth]: confirmed_at, email_change_sent_at, last_sign_in_at, raw_app_meta_data, raw_user_meta_data, is_super_admin, created_at, updated_at, phone_confirmed_at, phone_change_sent_at, is_anonymous, email_change_confirm_status, banned_until, reauthentication_sent_at, is_sso_user, deleted_at, role, email, encrypted_password, email_change_token_current, phone, confirmation_token, reauthentication_token, instance_id, id, email_confirmed_at, invited_at, confirmation_sent_at, recovery_sent_at, recovery_token, phone_change, email_change_token_new, email_change, phone_change_token, aud
-Schema [public]: id, trial_ends_at, current_period_end, is_auto_renew, email, billing_interval, subscription_status
-Total en public.users: 4
-Columnas en public.users (raw first row keys): id, email, trial_ends_at, subscription_status, current_period_end, billing_interval, is_auto_renew
-
---- VERIFICACIÓN DE ENDPOINT /api/users ---
-ERROR: Status 500
-{"error":"Failed to fetch users"}
+Schema [auth]: confirmation_token, invited_at, confirmation_sent_at, recovery_sent_at, email_change_sent_at, last_sign_in_at, raw_app_meta_data, raw_user_meta_data, is_super_admin, created_at, updated_at, phone_confirmed_at, phone_change_sent_at, confirmed_at, email_change_confirm_status, banned_until, reauthentication_sent_at, is_sso_user, deleted_at, phone_change, email_change_token_new, email_change, phone_change_token, aud, role, email, encrypted_password, email_change_token_current, phone, is_anonymous, instance_id, id, email_confirmed_at, reauthentication_token, recovery_token
+Schema [public]: id, trial_ends_at, current_period_end, is_auto_renew, sucursales_extra, ciclo_de_pago, billing_interval, phone, email, plan, subscription_status
+Total en public.users: 5
+Columnas en public.users (raw first row keys): id, email, trial_ends_at, subscription_status, current_period_end, billing_interval, is_auto_renew, plan, ciclo_de_pago, sucursales_extra, phone
