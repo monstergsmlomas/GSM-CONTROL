@@ -9,7 +9,7 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "server": "tsx server/index.ts",
-    "start": "node index.js"
+    "start": "tsx server/index.ts"
   },
   "dependencies": {
     "@tailwindcss/postcss": "^4.1.18",
