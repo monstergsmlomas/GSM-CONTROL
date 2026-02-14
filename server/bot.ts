@@ -1,30 +1,41 @@
+Antigravity, por favor reemplaza todo el contenido del archivo `bot.ts` (o el archivo que contiene la configuración de whatsapp-web.js) con este código. Hemos eliminado `executablePath` para evitar deadlocks en Railway y añadido el evento `loading_screen` para tener un diagnóstico en tiempo real:
+
 import pkg from 'whatsapp-web.js';
 const { Client, LocalAuth } = pkg;
 import qrcode from 'qrcode-terminal';
-import puppeteer from 'puppeteer';
 
 let client: any;
 
 export const initWhatsApp = () => {
-    console.log("🚀 [WhatsApp] Inicializando cliente con Chromium del sistema...");
+    console.log("🚀 [WhatsApp] Encendiendo motores... (Esto puede demorar en Railway)");
     
     client = new Client({
         authStrategy: new LocalAuth({
             dataPath: './.wwebjs_auth'
         }),
         puppeteer: {
-            executablePath: puppeteer.executablePath(),
+            // Se elimina executablePath para usar el motor nativo y evitar bloqueos
+            headless: true,
             args: [
-                '--no-sandbox', 
-                '--disable-setuid-sandbox', 
-                '--disable-dev-shm-usage', 
+                '--no-sandbox',
+                '--disable-setuid-sandbox',
+                '--disable-dev-shm-usage',
+                '--disable-accelerated-2d-canvas',
+                '--no-first-run',
+                '--no-zygote',
+                '--single-process',
                 '--disable-gpu'
             ],
-            headless: true
+            timeout: 60000 // 60 segundos de tolerancia para encender en la nube
         }
     });
 
-   client.on('qr', (qr: string) => {
+    // NUEVO RADAR: Esto nos avisará si el navegador invisible realmente se abrió
+    client.on('loading_screen', (percent: string, message: string) => {
+        console.log(`⏳ [WhatsApp] Cargando Web: ${percent}% - ${message}`);
+    });
+
+    client.on('qr', (qr: string) => {
         console.log('✨ [WhatsApp] NUEVO CÓDIGO QR DETECTADO.');
         qrcode.generate(qr, { small: true });
         
@@ -44,9 +55,17 @@ export const initWhatsApp = () => {
         console.error('❌ [WhatsApp] Error de autenticación:', msg);
     });
 
-    client.initialize().catch((err: any) => {
-        console.error('❌ [WhatsApp] Error al inicializar:', err);
+    client.on('disconnected', (reason: any) => {
+        console.log('⚠️ [WhatsApp] Bot desconectado. Razón:', reason);
     });
+
+    console.log("⏳ [WhatsApp] Iniciando cliente (Esperando al navegador invisible)...");
+    
+    client.initialize()
+        .then(() => console.log("🏁 [WhatsApp] Comando de inicialización finalizado."))
+        .catch((err: any) => {
+            console.error('❌ [WhatsApp] Error FATAL al inicializar:', err);
+        });
 };
 
 export const sendWhatsAppMessage = async (to: string, message: string) => {
