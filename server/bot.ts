@@ -6,10 +6,9 @@ let client: any;
 let isReady = false;
 
 export const initWhatsApp = () => {
-    console.log("🚀 [WhatsApp] Encendiendo con memoria persistente...");
+    console.log("🚀 [WhatsApp] Encendiendo motor ultra-ligero...");
     
     client = new Client({
-        // Usamos la ruta exacta donde montamos el volumen en Railway
         authStrategy: new LocalAuth({ 
             dataPath: './.wwebjs_auth' 
         }),
@@ -26,11 +25,14 @@ export const initWhatsApp = () => {
                 '--disable-accelerated-2d-canvas',
                 '--no-first-run',
                 '--no-zygote',
+                '--single-process', // CLAVE: Reduce drásticamente el uso de RAM
                 '--disable-gpu',
+                '--disable-software-rasterizer',
                 '--disable-extensions',
-                '--disable-default-apps'
+                '--disable-default-apps',
+                '--font-render-hinting=none'
             ],
-            timeout: 60000,
+            timeout: 120000, // 2 minutos para el arranque inicial
             protocolTimeout: 300000
         }
     });
@@ -47,21 +49,27 @@ export const initWhatsApp = () => {
     });
 
     client.on('authenticated', () => {
-        console.log('🔓 [WhatsApp] Sesión guardada en el volumen.');
+        console.log('🔓 [WhatsApp] Sesión validada correctamente.');
     });
 
-    client.on('disconnected', () => {
+    client.on('auth_failure', (msg: string) => {
+        console.error('❌ [WhatsApp] Fallo de autenticación:', msg);
+    });
+
+    client.on('disconnected', (reason: any) => {
         isReady = false;
-        console.log('⚠️ [WhatsApp] Bot desconectado.');
+        console.log('⚠️ [WhatsApp] Bot desconectado. Razón:', reason);
     });
 
-    client.initialize().catch((err: any) => console.error('❌ Error fatal:', err));
+    client.initialize().catch((err: any) => {
+        console.error('❌ [WhatsApp] Error crítico al inicializar:', err);
+    });
 };
 
 export const sendWhatsAppMessage = async (to: string, message: string) => {
     try {
         if (!client || !isReady) {
-            console.error("❌ [WhatsApp] El bot aún no está listo.");
+            console.error("❌ [WhatsApp] El bot no está listo para enviar mensajes.");
             return false;
         }
 
@@ -69,15 +77,12 @@ export const sendWhatsAppMessage = async (to: string, message: string) => {
         const chatId = `${cleanNumber}@c.us`;
 
         console.log(`📨 [WhatsApp] Enviando mensaje a ${cleanNumber}...`);
-        
-        // El evaluate ayuda a que Puppeteer no se tilde en servidores con poca RAM
         await client.sendMessage(chatId, message);
-        
-        console.log(`✅ [WhatsApp] Mensaje enviado correctamente.`);
+        console.log(`✅ [WhatsApp] Mensaje enviado con éxito.`);
         return true;
 
     } catch (error: any) {
-        console.error(`💥 [WhatsApp] Fallo al enviar:`, error.message);
+        console.error(`💥 [WhatsApp] Fallo al enviar a ${to}:`, error.message);
         return false;
     }
 };
