@@ -1,11 +1,11 @@
-
+import { useState, useEffect } from 'react';
 import { 
     LayoutDashboard, 
     Users, 
     Activity, 
     PieChart, 
     Settings, 
-    LogOut 
+    LogOut
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -15,6 +15,8 @@ interface SidebarProps {
 }
 
 const Sidebar = ({ sidebarOpen, activeTab, setActiveTab }: SidebarProps) => {
+    const [activeCount, setActiveCount] = useState(1);
+    
     const menuItems = [
         { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
         { id: 'users', label: 'Usuarios', icon: Users },
@@ -22,6 +24,48 @@ const Sidebar = ({ sidebarOpen, activeTab, setActiveTab }: SidebarProps) => {
         { id: 'metrics', label: 'Métricas', icon: PieChart },
         { id: 'settings', label: 'Configuración', icon: Settings },
     ];
+
+    // PROTOCOLO "LAST SEEN" (Heartbeat)
+    useEffect(() => {
+        const userEmail = localStorage.getItem('userEmail') || 'admin@gsmfix.com';
+        
+        const heartbeat = async () => {
+            try {
+                await fetch('/api/users/ping', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email: userEmail })
+                });
+            } catch (error) {
+                console.warn('Silent heartbeat failure');
+            }
+        };
+
+        const fetchActiveCount = async () => {
+            try {
+                const res = await fetch('/api/users/active-count');
+                const data = await res.json();
+                if (data && typeof data.count === 'number') {
+                    setActiveCount(data.count);
+                }
+            } catch (error) {
+                console.warn('Failed to fetch active count');
+            }
+        };
+
+        // Ejecuciones iniciales
+        heartbeat();
+        fetchActiveCount();
+
+        // Intervalos
+        const pingInterval = setInterval(heartbeat, 60000); // 1 min (más agresivo para "real-time")
+        const countInterval = setInterval(fetchActiveCount, 30000); // 30 seg
+
+        return () => {
+            clearInterval(pingInterval);
+            clearInterval(countInterval);
+        };
+    }, []);
 
     return (
         <aside 
@@ -76,6 +120,20 @@ const Sidebar = ({ sidebarOpen, activeTab, setActiveTab }: SidebarProps) => {
                     );
                 })}
             </nav>
+
+            {/* INDICADOR EN TIEMPO REAL */}
+            <div className={`px-6 py-4 flex items-center gap-3 border-t border-zinc-800/50 bg-zinc-900/20 ${!sidebarOpen && 'justify-center px-0'}`}>
+                <div className="relative flex h-2 w-2">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                </div>
+                {sidebarOpen && (
+                    <div className="flex flex-col">
+                        <span className="text-[10px] font-black text-emerald-500 uppercase tracking-widest leading-none">Live Now</span>
+                        <span className="text-white text-xs font-bold mt-1 leading-none">{activeCount} Usuarios Activos</span>
+                    </div>
+                )}
+            </div>
 
             {/* FOOTER */}
             <div className="p-3 border-t border-zinc-800">

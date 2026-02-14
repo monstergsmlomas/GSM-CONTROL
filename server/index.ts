@@ -10,10 +10,10 @@ dotenv.config({ path: path.resolve(__dirname, "../.env") });
 import express from "express";
 import cors from "cors";
 import { getDb } from "./db";
-import { users, audit_logs, settings } from "./schema";
+import { users, audit_logs, settings, bot_settings } from "./schema";
 import { eq, desc, sql } from "drizzle-orm";
 import { initWhatsApp, sendWhatsAppMessage } from "./bot";
-import { initCronJobs } from "./cron";
+import { startCronJobs } from "./cron";
 
 const app = express();
 
@@ -402,6 +402,109 @@ app.get("/api/debug-tables", async (req, res) => {
     }
 });
 
+// POST /api/users/ping - Actualizar "Last Seen"
+app.post("/api/users/ping", async (req, res) => {
+    try {
+        const dbUrl = (req.headers['x-db-url'] as string) || process.env.DATABASE_URL;
+        if (!dbUrl) throw new Error("DATABASE_URL not configured");
+        const db = getDb(dbUrl);
+
+        const { email } = req.body;
+        if (!email) return res.status(400).json({ error: "Email is required" });
+
+        await db.update(users)
+            .set({ lastSeen: new Date() })
+            .where(eq(users.email, email));
+
+        res.json({ success: true });
+    } catch (error: any) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// GET /api/users/active-count - Obtener cantidad de usuarios activos (últimos 5 min)
+app.get("/api/users/active-count", async (req, res) => {
+    try {
+        const dbUrl = (req.headers['x-db-url'] as string) || process.env.DATABASE_URL;
+        if (!dbUrl) throw new Error("DATABASE_URL not configured");
+        const db = getDb(dbUrl);
+
+        // Hace 5 minutos
+        const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
+
+        const result = await db.execute(sql`
+            SELECT count(*) as count 
+            FROM ${users} 
+            WHERE ${users.lastSeen} > ${fiveMinutesAgo}
+        `);
+
+        const count = parseInt(result.rows[0].count as string) || 0;
+        res.json({ count });
+    } catch (error: any) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// GET /api/bot-settings
+app.get("/api/bot-settings", async (req, res) => {
+    try {
+        const dbUrl = (req.headers['x-db-url'] as string) || process.env.DATABASE_URL;
+        if (!dbUrl) throw new Error("DATABASE_URL not configured");
+        const db = getDb(dbUrl);
+        
+        const settingsRes = await db.select().from(bot_settings).limit(1);
+        if (settingsRes.length === 0) {
+            return res.json({
+                is_enabled: true,
+                welcome_message: "",
+                reminder_message: "",
+                trial_ended_message: ""
+            });
+        }
+        
+        const s = settingsRes[0];
+        res.json({
+            is_enabled: s.isEnabled,
+            welcome_message: s.welcomeMessage,
+            reminder_message: s.reminderMessage,
+            trial_ended_message: s.trialEndedMessage
+        });
+    } catch (error: any) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// POST /api/bot-settings
+app.post("/api/bot-settings", async (req, res) => {
+    try {
+        const dbUrl = (req.headers['x-db-url'] as string) || process.env.DATABASE_URL;
+        if (!dbUrl) throw new Error("DATABASE_URL not configured");
+        const db = getDb(dbUrl);
+        
+        const { is_enabled, welcome_message, reminder_message, trial_ended_message } = req.body;
+        
+        const existing = await db.select().from(bot_settings).limit(1);
+        
+        const data = {
+            isEnabled: is_enabled,
+            welcomeMessage: welcome_message,
+            reminderMessage: reminder_message,
+            trialEndedMessage: trial_ended_message,
+            updatedAt: new Date()
+        };
+
+        if (existing.length > 0) {
+            await db.update(bot_settings).set(data).where(eq(bot_settings.id, existing[0].id));
+        } else {
+            await db.insert(bot_settings).values(data as any);
+        }
+        
+        res.json({ success: true });
+    } catch (error: any) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
 // 2. Servir estáticos (Carpeta dist)
 const distPath = path.resolve(__dirname, '../dist');
 app.use(express.static(distPath));
@@ -415,11 +518,24 @@ app.get(/^\/(?!api).+/, (req, res) => {
 // POST /api/bot/welcome
 app.post("/api/bot/welcome", async (req, res) => {
     try {
+        const dbUrl = (req.headers['x-db-url'] as string) || process.env.DATABASE_URL;
+        if (!dbUrl) throw new Error("DATABASE_URL not configured");
+        const db = getDb(dbUrl);
+
         const { phone, email } = req.body;
         if (!phone) return res.status(400).json({ error: "Phone number is required" });
 
+        // 1. Obtener la configuración y plantilla
+        const config = await db.select().from(bot_settings).limit(1);
+        if (config.length === 0 || !config[0].isEnabled) {
+            return res.json({ success: false, message: "Bot desactivado o sin configurar" });
+        }
+
+        const template = config[0].welcomeMessage || "¡Hola {nombre}! Bienvenido a GSM-FIX.";
         const nombre = email ? email.split('@')[0] : 'Usuario';
-        const message = `🚀 *BIENVENIDO A GSM-FIX* 🚀\n\nHola *${nombre}*! Gracias por sumarte a la mejor plataforma de gestión para talleres. \n\nTu cuenta ha sido activada con éxito. Ya podés empezar a cargar tus reparaciones y clientes. \n\nSi tenés dudas, estamos acá para ayudarte!`;
+        
+        // 2. Reemplazo de variables
+        const message = template.replace(/{nombre}/g, nombre);
         
         const success = await sendWhatsAppMessage(phone, message);
         res.json({ success, message: success ? "Mensaje enviado" : "Error al enviar mensaje" });
@@ -437,7 +553,7 @@ app.listen(PORT, '0.0.0.0', async () => {
     
     // Inicializar Automatizaciones
     initWhatsApp();
-    initCronJobs();
+    startCronJobs();
 
     // Diagnóstico de arranque profundo (NON-BLOCKING)
     console.log("🔍 [Arranque] Iniciando diagnóstico de base de datos...");

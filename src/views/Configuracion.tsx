@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { 
     Settings, Shield, Save, Key, User, 
-    CheckCircle2, PieChart, AlertTriangle, Edit2, Check, X, MessageCircle, Target, Bell 
+    CheckCircle2, PieChart, AlertTriangle, Edit2, Check, X, MessageCircle, Target, Bell,
+    Send
 } from 'lucide-react';
 import type { Partner } from '../types';
 
@@ -10,10 +11,10 @@ interface ConfiguracionProps {
     initialPartners?: Partner[];
     initialWhatsappTemplate?: string;
     initialMrrTarget?: number;
-    initialAlertThreshold?: number; // NUEVA PROP
+    initialAlertThreshold?: number;
 }
 
-export default function Configuracion({ onSave, initialPartners, initialWhatsappTemplate, initialMrrTarget, initialAlertThreshold }: ConfiguracionProps) {
+export default function Configuracion({ onSave, initialPartners, initialMrrTarget, initialAlertThreshold }: ConfiguracionProps) {
     const [loading, setLoading] = useState(false);
     const [success, setSuccess] = useState(false);
 
@@ -29,13 +30,34 @@ export default function Configuracion({ onSave, initialPartners, initialWhatsapp
     const [pinForm, setPinForm] = useState({ currentPin: '', newPin: '', confirmPin: '' });
     const [pinMessage, setPinMessage] = useState({ type: '', text: '' });
 
-    const [whatsappTemplate, setWhatsappTemplate] = useState(initialWhatsappTemplate || '');
     const [mrrTarget, setMrrTarget] = useState<number>(initialMrrTarget || 1000000);
-    
-    // NUEVO: ESTADO PARA LA ALERTA
     const [alertThreshold, setAlertThreshold] = useState<number>(initialAlertThreshold || 48);
 
-    const totalShares = partners.reduce((sum, p) => sum + (editingId === p.id && tempPartner ? tempPartner.share : p.share), 0);
+    // NUEVOS ESTADOS PRO BOT
+    const [botEnabled, setBotEnabled] = useState(false);
+    const [templateWelcome, setTemplateWelcome] = useState("");
+    const [templateReminder48h, setTemplateReminder48h] = useState("");
+    const [templateTrialEnded, setTemplateTrialEnded] = useState("");
+
+    useEffect(() => {
+        const fetchBotSettings = async () => {
+            try {
+                const res = await fetch('/api/bot-settings');
+                const data = await res.json();
+                if (data) {
+                    setBotEnabled(data.is_enabled);
+                    setTemplateWelcome(data.welcome_message || "");
+                    setTemplateReminder48h(data.reminder_message || "");
+                    setTemplateTrialEnded(data.trial_ended_message || "");
+                }
+            } catch (error) {
+                console.error("Error fetching bot settings:", error);
+            }
+        };
+        fetchBotSettings();
+    }, []);
+
+    const totalShares = partners.reduce((sum: number, p: Partner) => sum + (editingId === p.id && tempPartner ? tempPartner.share : p.share), 0);
     const isShareValid = Math.abs(totalShares - 100) < 0.1;
 
     const startEditing = (partner: Partner) => {
@@ -50,7 +72,7 @@ export default function Configuracion({ onSave, initialPartners, initialWhatsapp
 
     const saveEditing = () => {
         if (!tempPartner || !tempPartner.name.trim()) return;
-        setPartners(partners.map(p => p.id === editingId ? { ...tempPartner } : p));
+        setPartners(partners.map((p: Partner) => p.id === editingId ? { ...tempPartner } : p));
         setEditingId(null);
         setTempPartner(null);
     };
@@ -80,7 +102,7 @@ export default function Configuracion({ onSave, initialPartners, initialWhatsapp
         setPinForm({ currentPin: '', newPin: '', confirmPin: '' });
     };
 
-    const handleSaveAll = () => {
+    const handleSaveAll = async () => {
         if (!isShareValid) {
             alert("Error: El total de participación debe ser exactamente 100%");
             return;
@@ -88,13 +110,30 @@ export default function Configuracion({ onSave, initialPartners, initialWhatsapp
 
         setLoading(true);
         
-        setTimeout(() => {
-            setLoading(false);
+        try {
+            // 1. Guardar Config Básica (props)
+            onSave({ partners, mrrTarget, alertThreshold });
+
+            // 2. Guardar Ajustes del Bot Pro
+            await fetch('/api/bot-settings', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    is_enabled: botEnabled,
+                    welcome_message: templateWelcome,
+                    reminder_message: templateReminder48h,
+                    trial_ended_message: templateTrialEnded
+                })
+            });
+
             setSuccess(true);
-            // ENVIAMOS alertThreshold PARA QUE SE GUARDE
-            onSave({ partners, whatsappTemplate, mrrTarget, alertThreshold }); 
             setTimeout(() => setSuccess(false), 3000);
-        }, 800);
+        } catch (error) {
+            console.error("Error saving all settings:", error);
+            alert("Hubo un error al guardar los ajustes.");
+        } finally {
+            setLoading(false);
+        }
     };
 
     return (
@@ -125,7 +164,7 @@ export default function Configuracion({ onSave, initialPartners, initialWhatsapp
                     </div>
 
                     <div className="space-y-3 flex-1">
-                        {partners.map((partner) => (
+                        {partners.map((partner: Partner) => (
                             <div key={partner.id} className="flex items-center gap-3 bg-zinc-950/50 p-3 rounded-lg border border-zinc-800 hover:border-zinc-700 transition-colors">
                                 <div className="w-10 h-10 rounded-full bg-gradient-to-br from-zinc-800 to-zinc-900 flex items-center justify-center text-sm font-bold text-zinc-300 border border-zinc-700 shrink-0 shadow-inner">
                                     {partner.name.substring(0,2).toUpperCase()}
@@ -279,53 +318,113 @@ export default function Configuracion({ onSave, initialPartners, initialWhatsapp
                     </div>
                 </div>
 
-                {/* 3. COMUNICACIONES Y ALERTAS (Rediseñado en 2 columnas) */}
-                <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6 shadow-lg lg:col-span-2">
-                    <div className="flex items-center gap-3 mb-6 pb-4 border-b border-zinc-800">
+                {/* 3. COMUNICACIONES Y ALERTAS (Rediseño Premium) */}
+                <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6 shadow-lg lg:col-span-2 relative overflow-hidden group">
+                    <div className="absolute top-0 right-0 w-64 h-64 bg-amber-500/5 blur-[100px] -mr-32 -mt-32 rounded-full pointer-events-none" />
+                    
+                    <div className="flex items-center gap-3 mb-8 pb-4 border-b border-zinc-800 relative z-10">
                         <div className="p-2 bg-amber-500/10 rounded-lg"><Bell className="text-amber-500" size={20} /></div>
                         <div>
                             <h3 className="text-lg font-bold text-white">Comunicaciones y Alertas</h3>
-                            <p className="text-xs text-zinc-500">Reglas de automatización para avisos y mensajería.</p>
+                            <p className="text-xs text-zinc-500 font-medium">Gestiona la inteligencia de tu bot y reglas de aviso.</p>
                         </div>
                     </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                        {/* Selector de Horas */}
-                        <div>
-                            <label className="text-[10px] font-black text-amber-500 uppercase tracking-widest flex items-center gap-2 mb-3">
-                                <Bell size={12} /> Activar etiqueta "URGENTE" a las:
-                            </label>
-                            <select 
-                                value={alertThreshold}
-                                onChange={(e) => setAlertThreshold(Number(e.target.value))}
-                                className="w-full bg-zinc-950 border border-zinc-800 text-white text-sm rounded-lg px-4 py-3 focus:border-amber-500 focus:outline-none transition-colors appearance-none cursor-pointer"
-                            >
-                                <option value={24}>24 Horas antes del vencimiento</option>
-                                <option value={48}>48 Horas antes del vencimiento</option>
-                                <option value={72}>72 Horas (3 días) antes</option>
-                                <option value={120}>120 Horas (5 días) antes</option>
-                                <option value={168}>168 Horas (1 semana) antes</option>
-                            </select>
-                            <p className="text-[10px] text-zinc-500 mt-2">
-                                Cuando un cliente entre en este margen de tiempo, su nombre titilará en amarillo en la lista de usuarios.
-                            </p>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-10 relative z-10">
+                        {/* Columna Izquierda: Configuración Base */}
+                        <div className="space-y-8">
+                            <div>
+                                <label className="text-[10px] font-black text-amber-500 uppercase tracking-[0.2em] flex items-center gap-2 mb-4">
+                                    <Bell size={12} className="animate-pulse" /> Alerta Visual de Vencimiento
+                                </label>
+                                <div className="bg-zinc-950/40 p-1 rounded-xl border border-zinc-800/80">
+                                    <select 
+                                        value={alertThreshold}
+                                        onChange={(e) => setAlertThreshold(Number(e.target.value))}
+                                        className="w-full bg-transparent text-zinc-200 text-sm rounded-lg px-4 py-3.5 focus:outline-none cursor-pointer hover:bg-zinc-800/30 transition-colors appearance-none"
+                                    >
+                                        <option value={24}>24 Horas antes (Mañana)</option>
+                                        <option value={48}>48 Horas antes (2 Días)</option>
+                                        <option value={72}>72 Horas antes (3 Días)</option>
+                                        <option value={120}>120 Horas (5 días) antes</option>
+                                        <option value={168}>168 Horas (1 semana) antes</option>
+                                    </select>
+                                </div>
+                                <p className="text-[10px] text-zinc-500 mt-3 font-medium px-1 italic">
+                                    El sistema marcará al usuario en amarillo cuando falte este tiempo para expirar.
+                                </p>
+                            </div>
+
+                            {/* Tarjeta del Interruptor Maestro Rediseñada */}
+                            <div className={`p-5 rounded-2xl border transition-all duration-500 ${botEnabled ? 'bg-emerald-500/5 border-emerald-500/30 shadow-[0_0_30px_-10px_rgba(16,185,129,0.1)]' : 'bg-zinc-950/60 border-zinc-800/80'}`}>
+                                <div className="flex items-center justify-between">
+                                    <div className="flex items-center gap-4">
+                                        <div className={`p-3 rounded-xl transition-all duration-500 ${botEnabled ? 'bg-emerald-500 text-white shadow-[0_0_15px_rgba(16,185,129,0.4)]' : 'bg-zinc-800 text-zinc-500'}`}>
+                                            <MessageCircle size={22} strokeWidth={2.5} />
+                                        </div>
+                                        <div>
+                                            <h4 className={`text-sm font-black uppercase tracking-wider transition-colors duration-500 ${botEnabled ? 'text-emerald-400' : 'text-zinc-400'}`}>Motor WhatsApp</h4>
+                                            <p className="text-[10px] text-zinc-500 font-bold mt-0.5">ESTADO: {botEnabled ? 'OPERATIVO' : 'DESACTIVADO'}</p>
+                                        </div>
+                                    </div>
+                                    <button 
+                                        onClick={() => setBotEnabled(!botEnabled)}
+                                        className={`group relative inline-flex h-7 w-14 items-center rounded-full transition-all duration-300 focus:outline-none p-1 ${botEnabled ? 'bg-emerald-500/20 border border-emerald-500/30' : 'bg-zinc-800 border border-zinc-700'}`}
+                                    >
+                                        <span className={`inline-block h-5 w-5 transform rounded-full bg-white shadow-lg transition-all duration-300 ${botEnabled ? 'translate-x-7 bg-emerald-400' : 'translate-x-0 bg-zinc-400'}`} />
+                                    </button>
+                                </div>
+                            </div>
+                            
+                            <div className="bg-zinc-800/20 rounded-2xl p-4 border border-zinc-800/50">
+                                <span className="text-[9px] text-zinc-500 uppercase font-black tracking-widest block mb-3 border-b border-zinc-800/50 pb-2">Variables Dinámicas</span>
+                                <div className="flex gap-2.5 flex-wrap">
+                                    <span className="px-3 py-1 bg-indigo-500/10 rounded-full text-[10px] font-black text-indigo-400 border border-indigo-500/20 select-none hover:bg-indigo-500/20 transition-colors cursor-default">#{'{nombre}'}</span>
+                                    <span className="px-3 py-1 bg-emerald-500/10 rounded-full text-[10px] font-black text-emerald-400 border border-emerald-500/20 select-none hover:bg-emerald-500/20 transition-colors cursor-default">#{'{plan}'}</span>
+                                    <span className="px-3 py-1 bg-amber-500/10 rounded-full text-[10px] font-black text-amber-400 border border-amber-500/20 select-none hover:bg-amber-500/20 transition-colors cursor-default">#{'{estado}'}</span>
+                                </div>
+                            </div>
                         </div>
 
-                        {/* Plantilla WhatsApp */}
-                        <div>
-                            <label className="text-[10px] font-black text-emerald-500 uppercase tracking-widest flex items-center gap-2 mb-3">
-                                <MessageCircle size={12} /> Plantilla Base de WhatsApp
-                            </label>
-                            <textarea 
-                                value={whatsappTemplate}
-                                onChange={(e) => setWhatsappTemplate(e.target.value)}
-                                className="w-full h-24 bg-zinc-950 border border-zinc-800 text-white text-sm rounded-lg px-4 py-3 focus:border-emerald-500 focus:outline-none transition-colors resize-none leading-relaxed"
-                                placeholder="Escribe tu mensaje aquí..."
-                            />
-                            <div className="flex gap-2 mt-2 flex-wrap">
-                                <span className="px-1.5 py-0.5 bg-zinc-800/50 rounded text-[10px] font-bold text-indigo-400 border border-zinc-700">{'{nombre}'}</span>
-                                <span className="px-1.5 py-0.5 bg-zinc-800/50 rounded text-[10px] font-bold text-emerald-400 border border-zinc-700">{'{plan}'}</span>
-                                <span className="px-1.5 py-0.5 bg-zinc-800/50 rounded text-[10px] font-bold text-amber-400 border border-zinc-700">{'{estado}'}</span>
+                        {/* Columna Derecha: Plantillas */}
+                        <div className="space-y-5">
+                            {/* Bienvenida */}
+                            <div className="bg-zinc-950/50 p-4 rounded-2xl border border-zinc-800/50 hover:border-indigo-500/30 transition-all duration-300">
+                                <label className="text-[9px] font-black text-indigo-400 uppercase tracking-[0.2em] flex items-center gap-2 mb-3">
+                                    <Send size={11} /> Mensaje de Bienvenida
+                                </label>
+                                <textarea 
+                                    value={templateWelcome}
+                                    onChange={(e) => setTemplateWelcome(e.target.value)}
+                                    className="w-full h-24 bg-black/20 text-zinc-300 text-xs rounded-xl px-4 py-3 focus:ring-1 focus:ring-indigo-500/30 focus:outline-none transition-all resize-none leading-relaxed placeholder-zinc-700 border-none"
+                                    placeholder="¡Hola {nombre}! Bienvenido a la plataforma..."
+                                />
+                            </div>
+
+                            {/* Aviso 48hs */}
+                            <div className="bg-zinc-950/50 p-4 rounded-2xl border border-zinc-800/50 hover:border-amber-500/30 transition-all duration-300">
+                                <label className="text-[9px] font-black text-amber-500 uppercase tracking-[0.2em] flex items-center gap-2 mb-3">
+                                    <Bell size={11} /> Recordatorio (48h antes)
+                                </label>
+                                <textarea 
+                                    value={templateReminder48h}
+                                    onChange={(e) => setTemplateReminder48h(e.target.value)}
+                                    className="w-full h-24 bg-black/20 text-zinc-300 text-xs rounded-xl px-4 py-3 focus:ring-1 focus:ring-amber-500/30 focus:outline-none transition-all resize-none leading-relaxed placeholder-zinc-700 border-none"
+                                    placeholder="Hola {nombre}, tu plan {plan} vence pronto..."
+                                />
+                            </div>
+
+                            {/* Fin Trial */}
+                            <div className="bg-zinc-950/50 p-4 rounded-2xl border border-zinc-800/50 hover:border-rose-500/30 transition-all duration-300">
+                                <label className="text-[9px] font-black text-rose-500 uppercase tracking-[0.2em] flex items-center gap-2 mb-3">
+                                    <AlertTriangle size={11} /> Fin de Periodo (Expirado)
+                                </label>
+                                <textarea 
+                                    value={templateTrialEnded}
+                                    onChange={(e) => setTemplateTrialEnded(e.target.value)}
+                                    className="w-full h-24 bg-black/20 text-zinc-300 text-xs rounded-xl px-4 py-3 focus:ring-1 focus:ring-rose-500/30 focus:outline-none transition-all resize-none leading-relaxed placeholder-zinc-700 border-none"
+                                    placeholder="Tu prueba ha finalizado. Actualiza para continuar..."
+                                />
                             </div>
                         </div>
                     </div>

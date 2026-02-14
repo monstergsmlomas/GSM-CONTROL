@@ -12,12 +12,22 @@ export const users = pgTable("users", {
   isAutoRenew: boolean("is_auto_renew").default(true),
   cicloDePago: text("ciclo_de_pago").default("mensual"), // mensual, semestral, anual
   sucursalesExtra: integer("sucursales_extra").default(0),
+  lastSeen: timestamp("last_seen").defaultNow(),
 });
 
 export const settings = pgTable("settings", {
   id: uuid("id").primaryKey().defaultRandom(),
   userId: text("user_id").notNull(),
   phone: text("phone"),
+});
+
+export const bot_settings = pgTable("bot_settings", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  isEnabled: boolean("is_enabled").default(true),
+  welcomeMessage: text("welcome_message"),
+  reminderMessage: text("reminder_message"),
+  trialEndedMessage: text("trial_ended_message"),
+  updatedAt: timestamp("updated_at").defaultNow(),
 });
 
 export const audit_logs = pgTable("audit_logs", {
