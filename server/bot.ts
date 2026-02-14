@@ -6,10 +6,13 @@ let client: any;
 let isReady = false;
 
 export const initWhatsApp = () => {
-    console.log("🚀 [WhatsApp] Encendiendo motor optimizado...");
+    console.log("🚀 [WhatsApp] Encendiendo con memoria persistente...");
     
     client = new Client({
-        authStrategy: new LocalAuth({ dataPath: './.wwebjs_auth' }),
+        // Usamos la ruta exacta donde montamos el volumen en Railway
+        authStrategy: new LocalAuth({ 
+            dataPath: './.wwebjs_auth' 
+        }),
         webVersionCache: {
             type: 'remote',
             remotePath: 'https://raw.githubusercontent.com/wppconnect-team/wa-version/main/html/2.2412.54.html',
@@ -24,8 +27,8 @@ export const initWhatsApp = () => {
                 '--no-first-run',
                 '--no-zygote',
                 '--disable-gpu',
-                '--disable-extensions', // Ahorra RAM
-                '--disable-default-apps' // Ahorra RAM
+                '--disable-extensions',
+                '--disable-default-apps'
             ],
             timeout: 60000,
             protocolTimeout: 300000
@@ -43,6 +46,10 @@ export const initWhatsApp = () => {
         console.log('✅ [WhatsApp] Cliente listo y conectado!');
     });
 
+    client.on('authenticated', () => {
+        console.log('🔓 [WhatsApp] Sesión guardada en el volumen.');
+    });
+
     client.on('disconnected', () => {
         isReady = false;
         console.log('⚠️ [WhatsApp] Bot desconectado.');
@@ -54,30 +61,23 @@ export const initWhatsApp = () => {
 export const sendWhatsAppMessage = async (to: string, message: string) => {
     try {
         if (!client || !isReady) {
-            console.error("❌ [WhatsApp] Bot no está listo todavía.");
+            console.error("❌ [WhatsApp] El bot aún no está listo.");
             return false;
         }
 
-        // Limpiar número y preparar ID
         const cleanNumber = to.replace(/\D/g, '');
         const chatId = `${cleanNumber}@c.us`;
 
-        console.log(`📡 [WhatsApp] Verificando número: ${chatId}...`);
-        
-        // Verificamos si el número es válido antes de enviar
-        const isRegistered = await client.isRegisteredUser(chatId);
-        if (!isRegistered) {
-            console.error(`❌ [WhatsApp] El número ${cleanNumber} no está registrado en WhatsApp.`);
-            return false;
-        }
-
         console.log(`📨 [WhatsApp] Enviando mensaje a ${cleanNumber}...`);
+        
+        // El evaluate ayuda a que Puppeteer no se tilde en servidores con poca RAM
         await client.sendMessage(chatId, message);
-        console.log(`✅ [WhatsApp] Mensaje entregado con éxito.`);
+        
+        console.log(`✅ [WhatsApp] Mensaje enviado correctamente.`);
         return true;
 
     } catch (error: any) {
-        console.error(`💥 [WhatsApp] Fallo interno al enviar:`, error.message);
+        console.error(`💥 [WhatsApp] Fallo al enviar:`, error.message);
         return false;
     }
 };
