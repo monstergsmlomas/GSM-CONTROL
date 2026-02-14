@@ -404,16 +404,16 @@ app.listen(PORT, '0.0.0.0', async () => {
             const dbUrl = process.env.DATABASE_URL;
             if (dbUrl) {
                 const maskedUrl = dbUrl.replace(/:([^:@]+)@/, ':****@');
-                console.log(`🔗 [Arranque] DATABASE_URL detectada: ${maskedUrl}`);
+                console.log(`🔗 [Arranque] DATABASE_URL: ${maskedUrl}`);
                 
                 const db = getDb(dbUrl);
                 
                 try {
                     const dbNameRes = await db.execute(sql.raw(`SELECT current_database()`));
-                    console.log(`📡 [Arranque] Conectado a la base de datos: ${dbNameRes.rows[0].current_database}`);
-                } catch (e) { console.log("⚠️ [Arranque] No se pudo obtener el nombre de la DB."); }
+                    console.log(`📡 [Arranque] Base de datos activa: ${dbNameRes.rows[0].current_database}`);
+                } catch (e) { console.log("⚠️ [Arranque] No se detectó nombre de DB."); }
 
-                console.log("📂 [Arranque] Verificando inventario de tablas en 'public'...");
+                console.log("🔍 [Arranque] Investigando inventario de tablas en 'public'...");
                 try {
                     const tablesListRes = await db.execute(sql.raw(`
                         SELECT table_name 
@@ -421,19 +421,34 @@ app.listen(PORT, '0.0.0.0', async () => {
                         WHERE table_schema = 'public'
                     `));
                     const tableNames = tablesListRes.rows.map((r: any) => r.table_name);
-                    console.log(`📑 [Arranque] Tablas encontradas: ${tableNames.join(", ") || "NINGUNA"}`);
+                    console.log(`📑 [Arranque] INVENTARIO DE TABLAS: [${tableNames.join(", ") || "VACÍO"}]`);
                     
-                    if (tableNames.includes('users')) {
-                        const uCount = await db.execute(sql.raw(`SELECT count(*) as count FROM users`));
-                        console.log(`📊 [Arranque] Conteo en 'users': ${uCount.rows[0].count}`);
+                    // Prueba de RLS y Existencia con esquema explícito
+                    for (const target of ['users', 'audit_logs']) {
+                        try {
+                            const probe = await db.execute(sql.raw(`SELECT count(*) as count FROM public.${target}`));
+                            const count = probe.rows[0].count;
+                            console.log(`📊 [Arranque] Conteo REAL en 'public.${target}': ${count}`);
+                            
+                            if (count === 0 || count === "0") {
+                                console.log(`⚠️ [Arranque] La tabla 'public.${target}' existe pero está VACÍA.`);
+                            }
+                        } catch (e: any) {
+                            console.log(`❌ [Arranque] Error accediendo a 'public.${target}': ${e.message}`);
+                            if (e.message.includes("permission denied") || e.message.includes("policy")) {
+                                console.log(`🔒 [Arranque] ¡POSIBLE BLOQUEO DE RLS DETECTADO en ${target}!`);
+                            }
+                        }
                     }
-                } catch (e: any) { console.log("❌ [Arranque] Falló el listado de tablas:", e.message); }
+                } catch (e: any) { 
+                    console.error("❌ [Arranque] Falló el discovery de esquema informático:", e.message); 
+                }
 
             } else {
-                console.log("⚠️ [Arranque] No se encontró DATABASE_URL en el entorno.");
+                console.log("⚠️ [Arranque] DATABASE_URL ausente en variables de entorno.");
             }
         } catch (e: any) {
-            console.error("❌ [Arranque] Error en diagnóstico (No crítico):", e.message);
+            console.error("❌ [Arranque] Error de diagnóstico (No crítico):", e.message);
         }
     };
 
