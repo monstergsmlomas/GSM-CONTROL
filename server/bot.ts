@@ -1,6 +1,7 @@
 import pkg from 'whatsapp-web.js';
 const { Client, LocalAuth } = pkg;
 import qrcode from 'qrcode-terminal';
+import puppeteer from 'puppeteer';
 
 let client: any;
 
@@ -12,11 +13,11 @@ export const initWhatsApp = () => {
             dataPath: './.wwebjs_auth'
         }),
         puppeteer: {
-            executablePath: '/usr/bin/chromium', // Magia pura: usamos el navegador oficial
+            executablePath: puppeteer.executablePath(),
             args: [
                 '--no-sandbox', 
                 '--disable-setuid-sandbox', 
-                '--disable-dev-shm-usage', // Evita crashes por falta de memoria RAM
+                '--disable-dev-shm-usage', 
                 '--disable-gpu'
             ],
             headless: true
