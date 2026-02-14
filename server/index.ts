@@ -41,8 +41,8 @@ app.get("/api/logs", async (req, res) => {
         
         res.json(logs);
     } catch (error: any) {
-        console.error("Error fetching logs:", error);
-        res.status(500).json({ error: "Failed to fetch audit logs" });
+        console.error("Error fetching logs (Returning empty array):", error);
+        res.json([]); // Return empty array instead of 500
     }
 });
 
@@ -77,10 +77,15 @@ app.get("/api/metrics", async (req, res) => {
         const db = getDb(dbUrl);
         
         const allUsers = await db.select().from(users);
-        const logs = await db.select()
-            .from(audit_logs)
-            .orderBy(desc(audit_logs.fecha))
-            .limit(5);
+        let logs: any[] = [];
+        try {
+            logs = await db.select()
+                .from(audit_logs)
+                .orderBy(desc(audit_logs.fecha))
+                .limit(5);
+        } catch (e) {
+            console.error("Non-fatal error fetching metrics logs:", e);
+        }
         
         const total = allUsers.length;
         const active = allUsers.filter(u => u.subscriptionStatus === 'active').length;
@@ -110,7 +115,7 @@ app.get("/api/users", async (req, res) => {
             setting: settings
         })
         .from(users)
-        .leftJoin(settings, sql`${users.id}::text = ${settings.userId}`);
+        .leftJoin(settings, eq(sql`${users.id}::text`, settings.userId));
 
         console.log(`Found ${allWithSettings.length} users with settings join.`);
         
@@ -211,14 +216,18 @@ app.patch("/api/users/:id", async (req, res) => {
              }
         }
 
-        // Insert Audit Log using strict types
-        await db.insert(audit_logs).values({
-            accion: 'Actualización de Cliente',
-            detalle: `Cambio de estado a ${subscriptionStatus || 'N/A'}`,
-            responsable: responsable || "Sistema",
-            monto: 0,
-            fecha: new Date()
-        });
+        // Insert Audit Log - Wrapped in try-catch to prevent main flow crash
+        try {
+            await db.insert(audit_logs).values({
+                accion: 'Actualización de Cliente',
+                detalle: `Cambio de estado a ${subscriptionStatus || 'N/A'}`,
+                responsable: responsable || "Sistema",
+                monto: 0,
+                fecha: new Date()
+            });
+        } catch (e) {
+            console.error("Failed to log audit action:", e);
+        }
 
         // Fetch updated user with settings
         const results = await db.select({
@@ -226,7 +235,7 @@ app.patch("/api/users/:id", async (req, res) => {
             setting: settings
         })
         .from(users)
-        .leftJoin(settings, sql`${users.id}::text = ${settings.userId}`)
+        .leftJoin(settings, eq(sql`${users.id}::text`, settings.userId))
         .where(eq(users.id, id));
 
         if (results.length === 0) {
