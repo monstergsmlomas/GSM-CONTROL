@@ -15,7 +15,11 @@ import { eq, desc, sql } from "drizzle-orm";
 
 const app = express();
 
-app.use(cors());
+app.use(cors({
+    origin: '*', // Allow all for Railway diagnostic phase
+    methods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'x-db-url']
+}));
 app.use(express.json());
 
 // Middlewares
@@ -394,23 +398,35 @@ app.listen(PORT, '0.0.0.0', async () => {
     try {
         const dbUrl = process.env.DATABASE_URL;
         if (dbUrl) {
+            // Masked log of DB URL
+            const maskedUrl = dbUrl.replace(/:([^:@]+)@/, ':****@');
+            console.log(`🔗 [Arranque] DATABASE_URL: ${maskedUrl}`);
+            
             const db = getDb(dbUrl);
             console.log("🔍 [Arranque] Verificando tablas en Supabase...");
             
-            // Probar usuarios
+            // Probar usuarios (esquema implícito)
             try {
-                const uCount = await db.execute(sql.raw(`SELECT count(*) FROM users`));
+                const uCount = await db.execute(sql.raw(`SELECT count(*) as count FROM users`));
                 console.log(`📊 [Arranque] Tabla 'users': ${uCount.rows[0].count} registros.`);
-            } catch (e: any) { console.log("❌ [Arranque] Tabla 'users' no encontrada o inaccesible."); }
+            } catch (e: any) { console.log(`❌ [Arranque] Tabla 'users' no encontrada: ${e.message}`); }
+
+            // Probar usuarios (esquema explícito public)
+            try {
+                const upCount = await db.execute(sql.raw(`SELECT count(*) as count FROM public.users`));
+                console.log(`📊 [Arranque] Tabla 'public.users': ${upCount.rows[0].count} registros.`);
+            } catch (e: any) { console.log(`❌ [Arranque] Tabla 'public.users' no encontrada: ${e.message}`); }
 
             // Probar clientes (posible nombre alternativo)
             try {
-                const cCount = await db.execute(sql.raw(`SELECT count(*) FROM clients`));
+                const cCount = await db.execute(sql.raw(`SELECT count(*) as count FROM clients`));
                 console.log(`📊 [Arranque] Tabla 'clients': ${cCount.rows[0].count} registros.`);
             } catch (e: any) { console.log("ℹ️ [Arranque] Tabla 'clients' no detectada."); }
 
+        } else {
+            console.log("⚠️ [Arranque] No se encontró DATABASE_URL en el entorno.");
         }
     } catch (e: any) {
-        console.error("❌ [Arranque] Error de diagnóstico:", e.message);
+        console.error("❌ [Arranque] Error crítico de diagnóstico:", e.message);
     }
 });
