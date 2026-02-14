@@ -124,7 +124,7 @@ const Sidebar = ({ sidebarOpen, activeTab, setActiveTab }: SidebarProps) => {
             {/* INDICADOR DE USUARIOS ACTIVOS (TAMAÑO MAXIMIZADO) */}
             <div className="px-3 mb-4 mt-auto">
                 {sidebarOpen ? (
-                    <div className="bg-gradient-to-br from-emerald-500/10 to-emerald-900/20 border border-emerald-500/30 rounded-xl p-4 flex items-center justify-between shadow-[0_0_15px_rgba(16,185,129,0.15)]">
+                    <div className="bg-linear-to-br from-emerald-500/10 to-emerald-900/20 border border-emerald-500/30 rounded-xl p-4 flex items-center justify-between shadow-[0_0_15px_rgba(16,185,129,0.15)]">
                         <div className="flex items-center gap-3">
                             <div className="relative flex h-3.5 w-3.5 shrink-0">
                                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
@@ -135,7 +135,7 @@ const Sidebar = ({ sidebarOpen, activeTab, setActiveTab }: SidebarProps) => {
                         <span className="text-2xl font-black text-white font-mono">{activeUsersCount || 0}</span>
                     </div>
                 ) : (
-                    <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-xl h-12 flex flex-col items-center justify-center relative mx-auto w-full max-w-[3rem]">
+                    <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-xl h-12 flex flex-col items-center justify-center relative mx-auto w-full max-w-12">
                         <div className="absolute top-1.5 right-1.5 flex h-2 w-2">
                             <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
                             <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>

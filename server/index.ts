@@ -522,32 +522,58 @@ app.get(/^\/(?!api).+/, (req, res) => {
     res.sendFile(path.join(distPath, 'index.html'));
 });
 
-// POST /api/bot/welcome
+// POST /api/bot/welcome - VERSION DIAGNOSTICO
 app.post("/api/bot/welcome", async (req, res) => {
+    console.log("📨 [API] Recibida petición de bienvenida para:", req.body.phone);
     try {
         const dbUrl = (req.headers['x-db-url'] as string) || process.env.DATABASE_URL;
-        if (!dbUrl) throw new Error("DATABASE_URL not configured");
+        if (!dbUrl) throw new Error("DATABASE_URL no configurada");
         const db = getDb(dbUrl);
 
         const { phone, email } = req.body;
-        if (!phone) return res.status(400).json({ error: "Phone number is required" });
+        if (!phone) return res.status(400).json({ error: "Falta el número de teléfono" });
 
-        // 1. Obtener la configuración y plantilla
-        const config = await db.select().from(bot_settings).limit(1);
+        // 1. Diagnóstico de Base de Datos
+        console.log("🔍 [API] Consultando configuración del bot...");
+        const config = await db.select().from(bot_settings).limit(1).catch(err => {
+            console.error("❌ [API] Error al consultar bot_settings:", err.message);
+            throw err;
+        });
+
         if (config.length === 0 || !config[0].isEnabled) {
-            return res.json({ success: false, message: "Bot desactivado o sin configurar" });
+            console.log("⚠️ [API] Bot desactivado en la configuración.");
+            return res.json({ success: false, message: "Bot desactivado o sin configurar en el panel" });
         }
 
         const template = config[0].welcomeMessage || "¡Hola {nombre}! Bienvenido a GSM-FIX.";
         const nombre = email ? email.split('@')[0] : 'Usuario';
-        
-        // 2. Reemplazo de variables
         const message = template.replace(/{nombre}/g, nombre);
         
-        const success = await sendWhatsAppMessage(phone, message);
-        res.json({ success, message: success ? "Mensaje enviado" : "Error al enviar mensaje" });
+        // 2. Diagnóstico de Envío
+        console.log(`🚀 [API] Intentando enviar WhatsApp a ${phone}...`);
+        
+        // Agregamos un timeout manual para que la API no se quede colgada si el bot se tilda
+        const sendPromise = sendWhatsAppMessage(phone, message);
+        const timeoutPromise = new Promise((_, reject) => 
+            setTimeout(() => reject(new Error("Timeout de 15s esperando al Bot")), 15000)
+        );
+
+        const success = await Promise.race([sendPromise, timeoutPromise]) as boolean;
+
+        console.log(success ? "✅ [API] Bot confirmó envío exitoso." : "❌ [API] Bot reportó falla en el envío.");
+        
+        return res.json({ 
+            success, 
+            message: success ? "Mensaje enviado" : "El bot está conectado pero no pudo procesar el envío" 
+        });
+
     } catch (error: any) {
-        res.status(500).json({ error: error.message });
+        console.error("💥 [API] ERROR CRÍTICO EN RUTA WELCOME:", error.message);
+        return res.status(500).json({ 
+            success: false, 
+            error: error.message,
+            step: "Revisá los logs de Railway para ver dónde se trabó" 
+        });
     }
 });
 
