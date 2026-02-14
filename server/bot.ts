@@ -3,15 +3,13 @@ const { Client, LocalAuth } = pkg;
 import qrcode from 'qrcode-terminal';
 
 let client: any;
+let isReady = false;
 
 export const initWhatsApp = () => {
-    console.log("🚀 [WhatsApp] Encendiendo motores...");
+    console.log("🚀 [WhatsApp] Encendiendo motor optimizado...");
     
     client = new Client({
-        authStrategy: new LocalAuth({
-            dataPath: './.wwebjs_auth'
-        }),
-        // ESTO ES LO QUE SOLUCIONA EL "PENDING" ETERNO:
+        authStrategy: new LocalAuth({ dataPath: './.wwebjs_auth' }),
         webVersionCache: {
             type: 'remote',
             remotePath: 'https://raw.githubusercontent.com/wppconnect-team/wa-version/main/html/2.2412.54.html',
@@ -25,15 +23,13 @@ export const initWhatsApp = () => {
                 '--disable-accelerated-2d-canvas',
                 '--no-first-run',
                 '--no-zygote',
-                '--disable-gpu'
+                '--disable-gpu',
+                '--disable-extensions', // Ahorra RAM
+                '--disable-default-apps' // Ahorra RAM
             ],
             timeout: 60000,
             protocolTimeout: 300000
         }
-    });
-
-    client.on('loading_screen', (percent: string, message: string) => {
-        console.log(`⏳ [WhatsApp] Cargando Web: ${percent}% - ${message}`);
     });
 
     client.on('qr', (qr: string) => {
@@ -43,28 +39,45 @@ export const initWhatsApp = () => {
     });
 
     client.on('ready', () => {
+        isReady = true;
         console.log('✅ [WhatsApp] Cliente listo y conectado!');
     });
 
-    console.log("⏳ [WhatsApp] Iniciando cliente...");
-    client.initialize().catch((err: any) => {
-        console.error('❌ [WhatsApp] Error al inicializar:', err);
+    client.on('disconnected', () => {
+        isReady = false;
+        console.log('⚠️ [WhatsApp] Bot desconectado.');
     });
+
+    client.initialize().catch((err: any) => console.error('❌ Error fatal:', err));
 };
 
 export const sendWhatsAppMessage = async (to: string, message: string) => {
     try {
-        if (!client) return false;
+        if (!client || !isReady) {
+            console.error("❌ [WhatsApp] Bot no está listo todavía.");
+            return false;
+        }
 
-        const formattedNumber = to.replace(/\D/g, '');
-        const chatId = `${formattedNumber}@c.us`;
+        // Limpiar número y preparar ID
+        const cleanNumber = to.replace(/\D/g, '');
+        const chatId = `${cleanNumber}@c.us`;
+
+        console.log(`📡 [WhatsApp] Verificando número: ${chatId}...`);
         
-        // Enviamos el mensaje
+        // Verificamos si el número es válido antes de enviar
+        const isRegistered = await client.isRegisteredUser(chatId);
+        if (!isRegistered) {
+            console.error(`❌ [WhatsApp] El número ${cleanNumber} no está registrado en WhatsApp.`);
+            return false;
+        }
+
+        console.log(`📨 [WhatsApp] Enviando mensaje a ${cleanNumber}...`);
         await client.sendMessage(chatId, message);
-        console.log(`📨 [WhatsApp] Mensaje enviado a ${formattedNumber}`);
+        console.log(`✅ [WhatsApp] Mensaje entregado con éxito.`);
         return true;
+
     } catch (error: any) {
-        console.error(`❌ [WhatsApp] Error enviando a ${to}:`, error);
+        console.error(`💥 [WhatsApp] Fallo interno al enviar:`, error.message);
         return false;
     }
 };
