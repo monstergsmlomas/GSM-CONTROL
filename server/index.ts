@@ -432,35 +432,34 @@ app.listen(PORT, '0.0.0.0', async () => {
                     console.log(`📡 [Arranque] Base de datos activa: ${dbNameRes.rows[0].current_database}`);
                 } catch (e) { console.log("⚠️ [Arranque] No se detectó nombre de DB."); }
 
-                console.log("🔍 [Arranque] Investigando inventario de tablas en 'public'...");
+                console.log("🔍 [Arranque] Investigando inventario de esquemas y tablas...");
                 try {
-                    const tablesListRes = await db.execute(sql.raw(`
-                        SELECT table_name 
+                    // 1. Listar Esquemas
+                    const schemasRes = await db.execute(sql.raw(`SELECT schema_name FROM information_schema.schemata`));
+                    const schemaNames = schemasRes.rows.map((r: any) => r.schema_name);
+                    console.log(`🌍 [Arranque] ESQUEMAS DISPONIBLES: [${schemaNames.join(", ")}]`);
+
+                    // 2. Listar todas las tablas y sus esquemas
+                    const allTablesRes = await db.execute(sql.raw(`
+                        SELECT table_schema, table_name 
                         FROM information_schema.tables 
-                        WHERE table_schema = 'public'
+                        WHERE table_schema NOT IN ('information_schema', 'pg_catalog')
                     `));
-                    const tableNames = tablesListRes.rows.map((r: any) => r.table_name);
-                    console.log(`📑 [Arranque] INVENTARIO DE TABLAS: [${tableNames.join(", ") || "VACÍO"}]`);
+                    const tablesInventory = allTablesRes.rows.map((r: any) => `${r.table_schema}.${r.table_name}`);
+                    console.log(`📑 [Arranque] INVENTARIO TOTAL: [${tablesInventory.join(", ") || "VACÍO"}]`);
                     
-                    // Prueba de RLS y Existencia con esquema explícito
-                    for (const target of ['users', 'audit_logs']) {
+                    // 3. Prueba de acceso específica
+                    const targets = ['users', 'audit_logs', 'public.users', 'public.audit_logs'];
+                    for (const target of targets) {
                         try {
-                            const probe = await db.execute(sql.raw(`SELECT count(*) as count FROM public.${target}`));
-                            const count = probe.rows[0].count;
-                            console.log(`📊 [Arranque] Conteo REAL en 'public.${target}': ${count}`);
-                            
-                            if (count === 0 || count === "0") {
-                                console.log(`⚠️ [Arranque] La tabla 'public.${target}' existe pero está VACÍA.`);
-                            }
+                            const probe = await db.execute(sql.raw(`SELECT count(*) as count FROM ${target}`));
+                            console.log(`✅ [Arranque] Acceso EXITOSO a '${target}': ${probe.rows[0].count} filas.`);
                         } catch (e: any) {
-                            console.log(`❌ [Arranque] Error accediendo a 'public.${target}': ${e.message}`);
-                            if (e.message.includes("permission denied") || e.message.includes("policy")) {
-                                console.log(`🔒 [Arranque] ¡POSIBLE BLOQUEO DE RLS DETECTADO en ${target}!`);
-                            }
+                            console.log(`❌ [Arranque] Acceso FALLIDO a '${target}': ${e.message}`);
                         }
                     }
                 } catch (e: any) { 
-                    console.error("❌ [Arranque] Falló el discovery de esquema informático:", e.message); 
+                    console.error("❌ [Arranque] Falló el discovery profundo:", e.message); 
                 }
 
             } else {
