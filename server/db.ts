@@ -34,14 +34,13 @@ export const getDb = (connectionString?: string) => {
     });
 
     pool.on('connect', (client) => {
-      client.query('SET search_path TO public').catch(err => {
-        console.error('[DB] Error setting search_path:', err.message);
-      });
+      client.query('SET search_path TO public')
+        .then(() => console.log(`[DB] Connected & search_path set to public for ${host}`))
+        .catch(err => console.error('[DB] Error setting search_path:', err.message));
     });
 
     pool.on('error', (err) => {
       console.error('[DB Pool Error] Unexpected error on idle client:', err);
-      // pg-pool handles reconnection automatically for new requests
     });
 
     poolCache.set(finalConnectionString, pool);

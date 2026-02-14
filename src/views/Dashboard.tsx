@@ -204,7 +204,7 @@ export default function Dashboard({ users, logs, isLoading, setCurrentView }: Da
                         <BarChart3 size={18} className="text-zinc-500"/> Tendencia de Ingresos
                     </h3>
                     <div style={{ height: '300px', width: '100%' }}>
-                        <ResponsiveContainer width="100%" height="100%">
+                        <ResponsiveContainer width="100%" height={300}>
                             <BarChart data={revenueData}>
                                 <CartesianGrid strokeDasharray="3 3" stroke="#27272a" vertical={false} />
                                 <XAxis dataKey="name" stroke="#71717a" tickLine={false} axisLine={false} />
@@ -224,7 +224,7 @@ export default function Dashboard({ users, logs, isLoading, setCurrentView }: Da
                         <PieChart size={18} className="text-zinc-500"/> Distribución de Planes
                     </h3>
                     <div style={{ height: '300px', width: '100%' }}>
-                        <ResponsiveContainer width="100%" height="100%">
+                        <ResponsiveContainer width="100%" height={300}>
                             <RePieChart>
                                 <Pie
                                     data={planDistribution}

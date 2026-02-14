@@ -133,9 +133,11 @@ app.get("/api/users", async (req, res) => {
         const dbUrl = (req.headers['x-db-url'] as string) || process.env.DATABASE_URL;
         if (!dbUrl) throw new Error("DATABASE_URL not configured");
         const db = getDb(dbUrl);
-        console.log(`[DEBUG] Attempting to fetch users from: ${dbUrl.substring(0, 20)}...`);
+        console.log(`[DEBUG] Fetching users. Using Service Role Secret presence: ${!!process.env.SUPABASE_SERVICE_ROLE_KEY}`);
+        
         let allWithSettings;
         try {
+            // Intento 1: Drizzle Query Estándar
             allWithSettings = await db.select({
                 user: users,
                 setting: settings
@@ -143,9 +145,9 @@ app.get("/api/users", async (req, res) => {
             .from(users)
             .leftJoin(settings, sql`${users.id}::text = ${settings.userId}`);
         } catch (joinError: any) {
-            console.error("⚠️ Error joining, trying explicit public schema fallback...");
+            console.warn("⚠️ Error en query estándar, intentando fallback de esquema explícito...");
             try {
-                // Raw fallback with explicit schema
+                // Intento 2: Raw SQL con esquema explícito public para saltar search_path roto
                 const rawUsers = await db.execute(sql.raw(`
                     SELECT u.*, s.phone as "setting_phone"
                     FROM public.users u
@@ -156,7 +158,7 @@ app.get("/api/users", async (req, res) => {
                     setting: { phone: r.setting_phone }
                 }));
             } catch (fallbackError: any) {
-                console.error("❌ Fatal database error (returning []):", fallbackError.message);
+                console.error("❌ Todos los intentos de lectura de usuarios fallaron:", fallbackError.message);
                 return res.json([]);
             }
         }
@@ -421,63 +423,59 @@ app.listen(PORT, '0.0.0.0', async () => {
     const dbDiscovery = async () => {
         try {
             const dbUrl = process.env.DATABASE_URL;
-            if (dbUrl) {
-                const maskedUrl = dbUrl.replace(/:([^:@]+)@/, ':****@');
-                console.log(`🔗 [Arranque] DATABASE_URL: ${maskedUrl}`);
-                
-                const db = getDb(dbUrl);
-                
-                // 1. Forzar esquema public como primera instrucción
-                try {
-                    await db.execute(sql.raw(`SET search_path TO public`));
-                    console.log("🛠️ [Arranque] Esquema 'public' forzado exitosamente.");
-                } catch (e) { console.log("⚠️ [Arranque] No se pudo forzar el search_path."); }
-
-                try {
-                    const dbNameRes = await db.execute(sql.raw(`SELECT current_database()`));
-                    console.log(`📡 [Arranque] Base de datos activa: ${dbNameRes.rows[0].current_database}`);
-                } catch (e) { console.log("⚠️ [Arranque] No se detectó nombre de DB."); }
-
-                console.log("🔍 [Arranque] Investigando inventario de esquemas y tablas...");
-                try {
-                    // 1. Listar Esquemas
-                    const schemasRes = await db.execute(sql.raw(`SELECT schema_name FROM information_schema.schemata`));
-                    const schemaNames = schemasRes.rows.map((r: any) => r.schema_name);
-                    console.log(`🌍 [Arranque] ESQUEMAS DISPONIBLES: [${schemaNames.join(", ")}]`);
-
-                    // 2. Listar todas las tablas y sus esquemas
-                    const allTablesRes = await db.execute(sql.raw(`
-                        SELECT table_schema, table_name 
-                        FROM information_schema.tables 
-                        WHERE table_schema NOT IN ('information_schema', 'pg_catalog')
-                    `));
-                    const tablesInventory = allTablesRes.rows.map((r: any) => `${r.table_schema}.${r.table_name}`);
-                    console.log(`📑 [Arranque] INVENTARIO TOTAL: [${tablesInventory.join(", ") || "VACÍO"}]`);
-                    
-                    // 3. Prueba de acceso específica y LOG SOLICITADO
-                    const targets = ['users', 'audit_logs', 'public.users', 'public.audit_logs'];
-                    for (const target of targets) {
-                        try {
-                            const probe = await db.execute(sql.raw(`SELECT count(*) as count FROM ${target}`));
-                            const count = probe.rows[0].count;
-                            console.log(`✅ [Arranque] Acceso EXITOSO a '${target}': ${count} filas.`);
-                            
-                            if (target === 'users' || target === 'public.users') {
-                                console.log(`📊 [Arranque] Conteo de usuarios detectados: [${count}]`);
-                            }
-                        } catch (e: any) {
-                            console.log(`❌ [Arranque] Acceso FALLIDO a '${target}': ${e.message}`);
-                        }
-                    }
-                } catch (e: any) { 
-                    console.error("❌ [Arranque] Falló el discovery profundo:", e.message); 
-                }
-
-            } else {
-                console.log("⚠️ [Arranque] DATABASE_URL ausente en variables de entorno.");
+            if (!dbUrl) {
+                console.log("⚠️ [Arranque] DATABASE_URL ausente.");
+                return;
             }
+
+            const db = getDb(dbUrl);
+            console.log("🔍 [Arranque] Iniciando exploración exhaustiva de esquemas...");
+
+            // 1. Forzar esquema public inmediatamente
+            try {
+                await db.execute(sql.raw(`SET search_path TO public`));
+                console.log("🛠️ [Arranque] search_path forzado a 'public'.");
+            } catch (e) { console.warn("⚠️ [Arranque] Falló SET search_path."); }
+
+            // 2. Reporte de Base de Datos
+            try {
+                const dbInfo = await db.execute(sql.raw(`SELECT current_database(), current_user, session_user`));
+                const info = dbInfo.rows[0];
+                console.log(`📡 [Arranque] DB: ${info.current_database} | User: ${info.current_user} | Session: ${info.session_user}`);
+            } catch (e) { console.warn("⚠️ [Arranque] No se pudo obtener info de sesión."); }
+
+            // 3. Exploración de Esquemas (information_schema.schemata)
+            try {
+                const schemasRes = await db.execute(sql.raw(`SELECT schema_name FROM information_schema.schemata`));
+                const schemas = schemasRes.rows.map((r: any) => r.schema_name as string);
+                console.log(`🌍 [Arranque] ESQUEMAS DISPONIBLES: [${schemas.join(", ")}]`);
+
+                // 4. Búsqueda de la tabla 'users' en todos los esquemas relevantes
+                for (const schemaName of schemas.filter((s: string) => !s.startsWith('pg_') && s !== 'information_schema')) {
+                    try {
+                        const countRes = await db.execute(sql.raw(`SELECT count(*) as count FROM "${schemaName}"."users"`));
+                        const count = countRes.rows[0].count;
+                        console.log(`✅ [Arranque] Tabla 'users' ENCONTRADA en esquema '${schemaName}'. Filas: ${count}`);
+                        if (schemaName === 'public') {
+                            console.log(`📊 [Arranque] Conteo de usuarios detectados: [${count}]`);
+                        }
+                    } catch (e) {
+                        // Silencioso para no ensuciar si no existe en ese esquema
+                    }
+                }
+            } catch (e: any) {
+                console.error("❌ [Arranque] Falló la exploración de esquemas:", e.message);
+            }
+
+            // 5. Inventario de tablas en public (Directo)
+            try {
+                const tablesRes = await db.execute(sql.raw(`SELECT table_name FROM information_schema.tables WHERE table_schema = 'public'`));
+                const tableNames = tablesRes.rows.map(r => r.table_name);
+                console.log(`📑 [Arranque] TABLAS EN 'public': [${tableNames.join(", ")}]`);
+            } catch (e) { console.warn("⚠️ [Arranque] Falló el listado simple de tablas public."); }
+
         } catch (e: any) {
-            console.error("❌ [Arranque] Error de diagnóstico (No crítico):", e.message);
+            console.error("❌ [Arranque] Error crítico en discovery:", e.message);
         }
     };
 
