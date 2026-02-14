@@ -1,4 +1,5 @@
-import { Client, LocalAuth } from 'whatsapp-web.js';
+import pkg from 'whatsapp-web.js';
+const { Client, LocalAuth } = pkg;
 import qrcode from 'qrcode-terminal';
 
 let client: Client;
@@ -6,6 +7,7 @@ let client: Client;
 export const initWhatsApp = () => {
     console.log("🚀 [WhatsApp] Inicializando cliente...");
     
+    // @ts-ignore - LocalAuth expects certain types that pkg might not export cleanly in TS
     client = new Client({
         authStrategy: new LocalAuth({
             dataPath: './.wwebjs_auth'
