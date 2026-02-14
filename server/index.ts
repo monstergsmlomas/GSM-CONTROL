@@ -18,6 +18,10 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+// 2. Servir archivos estáticos
+const distPath = path.resolve(__dirname, '../dist');
+app.use(express.static(distPath));
+
 // Middlewares
 
 app.use((req, res, next) => {
@@ -291,25 +295,18 @@ app.get("/api/check-db", async (req, res) => {
     }
 });
 
-// 2. Configuración de archivos estáticos (Busca donde termina tu última ruta de API)
-const distPath = path.join(__dirname, '../dist');
-app.use(express.static(distPath));
-
-// 3. El catch-all para React Router (Debe ir DESPUÉS de todas las rutas /api)
-app.get('/:path*', (req, res) => {
-    const distPath = path.join(__dirname, '../dist');
-    
-    // Si la ruta empieza con /api y llegó hasta aquí, no existe
+// 3. Catch-all definitivo para Express 5 (Compatible con Railway)
+app.get('*', (req, res) => {
+    // Si es una petición de API que no existía, 404
     if (req.path.startsWith('/api')) {
-        return res.status(404).json({ error: 'Ruta de API no encontrada' });
+        return res.status(404).json({ error: 'API route not found' });
     }
-    
-    // Para todo lo demás, servimos el index.html del frontend
+    // Para todo lo demás, enviamos el index.html
     res.sendFile(path.join(distPath, 'index.html'));
 });
 
-// 4. El puerto dinámico para Railway
+// 4. Puerto dinámico
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-    console.log(`🚀 Servidor operativo en puerto ${PORT}`);
+app.listen(PORT, '0.0.0.0', () => {
+    console.log(`🚀 Server running on port ${PORT}`);
 });
