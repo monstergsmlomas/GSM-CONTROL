@@ -2,18 +2,23 @@ import pkg from 'whatsapp-web.js';
 const { Client, LocalAuth } = pkg;
 import qrcode from 'qrcode-terminal';
 
-// Usamos 'any' para evitar conflictos con la importación especial
 let client: any;
 
 export const initWhatsApp = () => {
-    console.log("🚀 [WhatsApp] Inicializando cliente...");
+    console.log("🚀 [WhatsApp] Inicializando cliente con Chromium del sistema...");
     
     client = new Client({
         authStrategy: new LocalAuth({
             dataPath: './.wwebjs_auth'
         }),
         puppeteer: {
-            args: ['--no-sandbox', '--disable-setuid-sandbox'],
+            executablePath: '/usr/bin/chromium', // Magia pura: usamos el navegador oficial
+            args: [
+                '--no-sandbox', 
+                '--disable-setuid-sandbox', 
+                '--disable-dev-shm-usage', // Evita crashes por falta de memoria RAM
+                '--disable-gpu'
+            ],
             headless: true
         }
     });
