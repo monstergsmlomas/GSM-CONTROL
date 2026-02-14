@@ -15,7 +15,7 @@ interface SidebarProps {
 }
 
 const Sidebar = ({ sidebarOpen, activeTab, setActiveTab }: SidebarProps) => {
-    const [activeCount, setActiveCount] = useState(1);
+    const [activeUsersCount, setActiveUsersCount] = useState(1);
     
     const menuItems = [
         { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -46,7 +46,7 @@ const Sidebar = ({ sidebarOpen, activeTab, setActiveTab }: SidebarProps) => {
                 const res = await fetch('/api/users/active-count');
                 const data = await res.json();
                 if (data && typeof data.count === 'number') {
-                    setActiveCount(data.count);
+                    setActiveUsersCount(data.count);
                 }
             } catch (error) {
                 console.warn('Failed to fetch active count');
@@ -121,16 +121,26 @@ const Sidebar = ({ sidebarOpen, activeTab, setActiveTab }: SidebarProps) => {
                 })}
             </nav>
 
-            {/* INDICADOR EN TIEMPO REAL */}
-            <div className={`px-6 py-4 flex items-center gap-3 border-t border-zinc-800/50 bg-zinc-900/20 ${!sidebarOpen && 'justify-center px-0'}`}>
-                <div className="relative flex h-2 w-2">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                    <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-                </div>
-                {sidebarOpen && (
-                    <div className="flex flex-col">
-                        <span className="text-[10px] font-black text-emerald-500 uppercase tracking-widest leading-none">Live Now</span>
-                        <span className="text-white text-xs font-bold mt-1 leading-none">{activeCount} Usuarios Activos</span>
+            {/* INDICADOR DE USUARIOS ACTIVOS (TAMAÑO MAXIMIZADO) */}
+            <div className="px-3 mb-4 mt-auto">
+                {sidebarOpen ? (
+                    <div className="bg-gradient-to-br from-emerald-500/10 to-emerald-900/20 border border-emerald-500/30 rounded-xl p-4 flex items-center justify-between shadow-[0_0_15px_rgba(16,185,129,0.15)]">
+                        <div className="flex items-center gap-3">
+                            <div className="relative flex h-3.5 w-3.5 shrink-0">
+                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                                <span className="relative inline-flex rounded-full h-3.5 w-3.5 bg-emerald-500"></span>
+                            </div>
+                            <span className="text-sm font-bold text-emerald-400 tracking-wide">Usuarios Activos</span>
+                        </div>
+                        <span className="text-2xl font-black text-white font-mono">{activeUsersCount || 0}</span>
+                    </div>
+                ) : (
+                    <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-xl h-12 flex flex-col items-center justify-center relative mx-auto w-full max-w-[3rem]">
+                        <div className="absolute top-1.5 right-1.5 flex h-2 w-2">
+                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                            <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                        </div>
+                        <span className="text-lg font-black text-white font-mono mt-1">{activeUsersCount || 0}</span>
                     </div>
                 )}
             </div>
