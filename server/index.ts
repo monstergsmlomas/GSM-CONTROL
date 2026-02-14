@@ -12,6 +12,8 @@ import cors from "cors";
 import { getDb } from "./db";
 import { users, audit_logs, settings } from "./schema";
 import { eq, desc, sql } from "drizzle-orm";
+import { initWhatsApp, sendWhatsAppMessage } from "./bot";
+import { initCronJobs } from "./cron";
 
 const app = express();
 
@@ -406,8 +408,24 @@ app.use(express.static(distPath));
 
 // 3. LA SOLUCIÓN DEFINITIVA PARA EXPRESS 5:
 // Usamos una expresión regular que captura absolutamente todo (.*)
-app.get(/^(?!\/api).+/, (req, res) => {
+app.get(/^\/(?!api).+/, (req, res) => {
     res.sendFile(path.join(distPath, 'index.html'));
+});
+
+// POST /api/bot/welcome
+app.post("/api/bot/welcome", async (req, res) => {
+    try {
+        const { phone, email } = req.body;
+        if (!phone) return res.status(400).json({ error: "Phone number is required" });
+
+        const nombre = email ? email.split('@')[0] : 'Usuario';
+        const message = `🚀 *BIENVENIDO A GSM-FIX* 🚀\n\nHola *${nombre}*! Gracias por sumarte a la mejor plataforma de gestión para talleres. \n\nTu cuenta ha sido activada con éxito. Ya podés empezar a cargar tus reparaciones y clientes. \n\nSi tenés dudas, estamos acá para ayudarte!`;
+        
+        const success = await sendWhatsAppMessage(phone, message);
+        res.json({ success, message: success ? "Mensaje enviado" : "Error al enviar mensaje" });
+    } catch (error: any) {
+        res.status(500).json({ error: error.message });
+    }
 });
 
 // 4. Encendido del motor
@@ -417,6 +435,10 @@ console.log(`🚀 Intentando arrancar servidor en puerto ${PORT}...`);
 app.listen(PORT, '0.0.0.0', async () => {
     console.log(`✅ Servidor en línea en puerto ${PORT} (0.0.0.0)`);
     
+    // Inicializar Automatizaciones
+    initWhatsApp();
+    initCronJobs();
+
     // Diagnóstico de arranque profundo (NON-BLOCKING)
     console.log("🔍 [Arranque] Iniciando diagnóstico de base de datos...");
     
