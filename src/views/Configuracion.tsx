@@ -43,8 +43,12 @@ export default function Configuracion({ onSave, initialPartners, initialMrrTarge
         const fetchBotSettings = async () => {
             try {
                 const res = await fetch('/api/bot-settings');
+                if (!res.ok) {
+                    console.warn("⚠️ No se pudo cargar la configuración del bot. ¿La tabla existe?");
+                    return;
+                }
                 const data = await res.json();
-                if (data) {
+                if (data && !data.error) {
                     setBotEnabled(data.is_enabled);
                     setTemplateWelcome(data.welcome_message || "");
                     setTemplateReminder48h(data.reminder_message || "");
@@ -115,7 +119,7 @@ export default function Configuracion({ onSave, initialPartners, initialMrrTarge
             onSave({ partners, mrrTarget, alertThreshold });
 
             // 2. Guardar Ajustes del Bot Pro
-            await fetch('/api/bot-settings', {
+            const res = await fetch('/api/bot-settings', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -126,11 +130,17 @@ export default function Configuracion({ onSave, initialPartners, initialMrrTarge
                 })
             });
 
+            // EL DETALLE CLAVE: Validar que el servidor responda OK (200)
+            if (!res.ok) {
+                const errData = await res.json().catch(() => ({}));
+                throw new Error(errData.error || `Error del servidor (${res.status})`);
+            }
+
             setSuccess(true);
             setTimeout(() => setSuccess(false), 3000);
-        } catch (error) {
-            console.error("Error saving all settings:", error);
-            alert("Hubo un error al guardar los ajustes.");
+        } catch (error: any) {
+            console.error("Error al guardar ajustes:", error);
+            alert(`⚠️ No se guardaron los ajustes del bot:\n\n${error.message}\n\nSi el error es que la tabla no existe, necesitas correr 'npx drizzle-kit push' en tu terminal.`);
         } finally {
             setLoading(false);
         }
