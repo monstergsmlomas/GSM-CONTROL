@@ -427,6 +427,12 @@ app.listen(PORT, '0.0.0.0', async () => {
                 
                 const db = getDb(dbUrl);
                 
+                // 1. Forzar esquema public como primera instrucción
+                try {
+                    await db.execute(sql.raw(`SET search_path TO public`));
+                    console.log("🛠️ [Arranque] Esquema 'public' forzado exitosamente.");
+                } catch (e) { console.log("⚠️ [Arranque] No se pudo forzar el search_path."); }
+
                 try {
                     const dbNameRes = await db.execute(sql.raw(`SELECT current_database()`));
                     console.log(`📡 [Arranque] Base de datos activa: ${dbNameRes.rows[0].current_database}`);
@@ -448,12 +454,17 @@ app.listen(PORT, '0.0.0.0', async () => {
                     const tablesInventory = allTablesRes.rows.map((r: any) => `${r.table_schema}.${r.table_name}`);
                     console.log(`📑 [Arranque] INVENTARIO TOTAL: [${tablesInventory.join(", ") || "VACÍO"}]`);
                     
-                    // 3. Prueba de acceso específica
+                    // 3. Prueba de acceso específica y LOG SOLICITADO
                     const targets = ['users', 'audit_logs', 'public.users', 'public.audit_logs'];
                     for (const target of targets) {
                         try {
                             const probe = await db.execute(sql.raw(`SELECT count(*) as count FROM ${target}`));
-                            console.log(`✅ [Arranque] Acceso EXITOSO a '${target}': ${probe.rows[0].count} filas.`);
+                            const count = probe.rows[0].count;
+                            console.log(`✅ [Arranque] Acceso EXITOSO a '${target}': ${count} filas.`);
+                            
+                            if (target === 'users' || target === 'public.users') {
+                                console.log(`📊 [Arranque] Conteo de usuarios detectados: [${count}]`);
+                            }
                         } catch (e: any) {
                             console.log(`❌ [Arranque] Acceso FALLIDO a '${target}': ${e.message}`);
                         }
