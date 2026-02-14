@@ -26,10 +26,8 @@ export const initWhatsApp = () => {
                 '--no-sandbox',
                 '--disable-setuid-sandbox',
                 '--disable-dev-shm-usage',
-                '--disable-accelerated-2d-canvas',
-                '--no-first-run',
-                '--no-zygote',
                 '--single-process', 
+                '--no-zygote',
                 '--disable-gpu'
             ],
             timeout: 120000,
