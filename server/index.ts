@@ -296,11 +296,14 @@ const distPath = path.join(__dirname, '../dist');
 app.use(express.static(distPath));
 
 // 3. El catch-all para React Router (Debe ir DESPUÉS de todas las rutas /api)
-app.get('*', (req, res) => {
-    // Si la ruta empieza con /api y llegó hasta aquí, es que no existe
+app.get('/:path*', (req, res) => {
+    const distPath = path.join(__dirname, '../dist');
+    
+    // Si la ruta empieza con /api y llegó hasta aquí, no existe
     if (req.path.startsWith('/api')) {
         return res.status(404).json({ error: 'Ruta de API no encontrada' });
     }
+    
     // Para todo lo demás, servimos el index.html del frontend
     res.sendFile(path.join(distPath, 'index.html'));
 });
