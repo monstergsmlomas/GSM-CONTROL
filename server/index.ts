@@ -403,25 +403,35 @@ app.listen(PORT, '0.0.0.0', async () => {
             console.log(`🔗 [Arranque] DATABASE_URL: ${maskedUrl}`);
             
             const db = getDb(dbUrl);
-            console.log("🔍 [Arranque] Verificando tablas en Supabase...");
             
+            // Log de nombre de la base de datos
+            try {
+                const dbNameRes = await db.execute(sql.raw(`SELECT current_database()`));
+                console.log(`📡 [Arranque] Conectado a la base de datos: ${dbNameRes.rows[0].current_database}`);
+            } catch (e) { console.log("❌ [Arranque] No se pudo obtener el nombre de la DB."); }
+
+            console.log("🔍 [Arranque] Verificando inventario de tablas en 'public'...");
+            try {
+                const tablesListRes = await db.execute(sql.raw(`
+                    SELECT table_name 
+                    FROM information_schema.tables 
+                    WHERE table_schema = 'public'
+                `));
+                const tableNames = tablesListRes.rows.map((r: any) => r.table_name);
+                console.log(`📑 [Arranque] Tablas encontradas: ${tableNames.join(", ") || "NINGUNA"}`);
+            } catch (e: any) { console.log("❌ [Arranque] Falló el listado de tablas:", e.message); }
+
             // Probar usuarios (esquema implícito)
             try {
                 const uCount = await db.execute(sql.raw(`SELECT count(*) as count FROM users`));
-                console.log(`📊 [Arranque] Tabla 'users': ${uCount.rows[0].count} registros.`);
-            } catch (e: any) { console.log(`❌ [Arranque] Tabla 'users' no encontrada: ${e.message}`); }
+                console.log(`📊 [Arranque] Conteo en 'users': ${uCount.rows[0].count}`);
+            } catch (e: any) { console.log(`❌ [Arranque] Tabla 'users' inaccesible.`); }
 
             // Probar usuarios (esquema explícito public)
             try {
                 const upCount = await db.execute(sql.raw(`SELECT count(*) as count FROM public.users`));
-                console.log(`📊 [Arranque] Tabla 'public.users': ${upCount.rows[0].count} registros.`);
-            } catch (e: any) { console.log(`❌ [Arranque] Tabla 'public.users' no encontrada: ${e.message}`); }
-
-            // Probar clientes (posible nombre alternativo)
-            try {
-                const cCount = await db.execute(sql.raw(`SELECT count(*) as count FROM clients`));
-                console.log(`📊 [Arranque] Tabla 'clients': ${cCount.rows[0].count} registros.`);
-            } catch (e: any) { console.log("ℹ️ [Arranque] Tabla 'clients' no detectada."); }
+                console.log(`📊 [Arranque] Conteo en 'public.users': ${upCount.rows[0].count}`);
+            } catch (e: any) { console.log(`❌ [Arranque] Tabla 'public.users' inaccesible.`); }
 
         } else {
             console.log("⚠️ [Arranque] No se encontró DATABASE_URL en el entorno.");

@@ -1,7 +1,9 @@
 
-import { pgTable, text, timestamp, uuid, boolean, integer } from "drizzle-orm/pg-core";
+import { pgTable, text, timestamp, uuid, boolean, integer, pgSchema } from "drizzle-orm/pg-core";
 
-export const users = pgTable("users", {
+const publicSchema = pgSchema("public");
+
+export const users = publicSchema.table("users", {
   id: uuid("id").primaryKey().defaultRandom(),
   email: text("email").notNull().unique(),
   trialEndsAt: timestamp("trial_ends_at"),
@@ -14,13 +16,13 @@ export const users = pgTable("users", {
   sucursalesExtra: integer("sucursales_extra").default(0),
 });
 
-export const settings = pgTable("settings", {
+export const settings = publicSchema.table("settings", {
   id: uuid("id").primaryKey().defaultRandom(),
   userId: text("user_id").notNull(),
   phone: text("phone"),
 });
 
-export const audit_logs = pgTable("audit_logs", {
+export const audit_logs = publicSchema.table("audit_logs", {
   id: uuid("id").primaryKey().defaultRandom(),
   accion: text("accion").notNull(),
   detalle: text("detalle").notNull(),
