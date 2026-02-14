@@ -82,7 +82,15 @@ app.get("/api/metrics", async (req, res) => {
         if (!dbUrl) throw new Error("DATABASE_URL not configured");
         const db = getDb(dbUrl);
         
-        const allUsers = await db.select().from(users);
+        let allUsers;
+        try {
+            allUsers = await db.select().from(users);
+        } catch (e) {
+            console.log("⚠️ Fallback: Querying 'public.users' for metrics...");
+            const rawRes = await db.execute(sql.raw(`SELECT * FROM public.users`));
+            allUsers = rawRes.rows;
+        }
+
         let logs: any[] = [];
         try {
             logs = await db.select()
@@ -90,12 +98,17 @@ app.get("/api/metrics", async (req, res) => {
                 .orderBy(desc(audit_logs.fecha))
                 .limit(5);
         } catch (e) {
-            console.error("Non-fatal error fetching metrics logs:", e);
+            try {
+                const rawLogs = await db.execute(sql.raw(`SELECT * FROM public.audit_logs ORDER BY fecha DESC LIMIT 5`));
+                logs = rawLogs.rows;
+            } catch (le) {
+                console.error("Non-fatal error fetching metrics logs:", le);
+            }
         }
         
         const total = allUsers.length;
-        const active = allUsers.filter(u => u.subscriptionStatus === 'active').length;
-        const trialing = allUsers.filter(u => u.subscriptionStatus === 'trialing').length;
+        const active = allUsers.filter((u: any) => u.subscription_status === 'active' || u.subscriptionStatus === 'active').length;
+        const trialing = allUsers.filter((u: any) => u.subscription_status === 'trialing' || u.subscriptionStatus === 'trialing').length;
         
         res.json({
             total,
@@ -129,15 +142,21 @@ app.get("/api/users", async (req, res) => {
             })
             .from(users)
             .leftJoin(settings, sql`${users.id}::text = ${settings.userId}`);
-            
-            console.log(`[DEBUG] Database returned ${allWithSettings.length} rows from users JOIN settings.`);
         } catch (joinError: any) {
-            console.error("⚠️ Error joining with settings, falling back to basic users fetch:", joinError.message);
+            console.error("⚠️ Error joining, trying explicit public schema fallback...");
             try {
-                const basicUsers = await db.select().from(users);
-                allWithSettings = basicUsers.map(u => ({ user: u, setting: null }));
-            } catch (usersError: any) {
-                console.error("❌ Fatal database error (returning []):", usersError.message);
+                // Raw fallback with explicit schema
+                const rawUsers = await db.execute(sql.raw(`
+                    SELECT u.*, s.phone as "setting_phone"
+                    FROM public.users u
+                    LEFT JOIN public.settings s ON u.id::text = s.user_id
+                `));
+                allWithSettings = rawUsers.rows.map((r: any) => ({
+                    user: r,
+                    setting: { phone: r.setting_phone }
+                }));
+            } catch (fallbackError: any) {
+                console.error("❌ Fatal database error (returning []):", fallbackError.message);
                 return res.json([]);
             }
         }

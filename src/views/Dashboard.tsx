@@ -199,48 +199,52 @@ export default function Dashboard({ users, logs, isLoading, setCurrentView }: Da
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6 h-[350px]">
+                <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6">
                     <h3 className="text-white font-bold mb-6 flex items-center gap-2">
                         <BarChart3 size={18} className="text-zinc-500"/> Tendencia de Ingresos
                     </h3>
-                    <ResponsiveContainer width="100%" height={300}>
-                        <BarChart data={revenueData}>
-                            <CartesianGrid strokeDasharray="3 3" stroke="#27272a" vertical={false} />
-                            <XAxis dataKey="name" stroke="#71717a" tickLine={false} axisLine={false} />
-                            <YAxis stroke="#71717a" tickLine={false} axisLine={false} tickFormatter={(value) => `$${value}`} />
-                            <Tooltip
-                                contentStyle={{ backgroundColor: '#18181b', borderColor: '#27272a', color: '#fff', borderRadius: '8px' }}
-                                cursor={{fill: '#27272a'}}
-                            />
-                            <Bar dataKey="total" fill="#10b981" radius={[4, 4, 0, 0]} barSize={40} />
-                        </BarChart>
-                    </ResponsiveContainer>
+                    <div style={{ height: '300px', width: '100%' }}>
+                        <ResponsiveContainer width="100%" height="100%">
+                            <BarChart data={revenueData}>
+                                <CartesianGrid strokeDasharray="3 3" stroke="#27272a" vertical={false} />
+                                <XAxis dataKey="name" stroke="#71717a" tickLine={false} axisLine={false} />
+                                <YAxis stroke="#71717a" tickLine={false} axisLine={false} tickFormatter={(value) => `$${value}`} />
+                                <Tooltip
+                                    contentStyle={{ backgroundColor: '#18181b', borderColor: '#27272a', color: '#fff', borderRadius: '8px' }}
+                                    cursor={{fill: '#27272a'}}
+                                />
+                                <Bar dataKey="total" fill="#10b981" radius={[4, 4, 0, 0]} barSize={40} />
+                            </BarChart>
+                        </ResponsiveContainer>
+                    </div>
                 </div>
 
-                <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6 h-[400px]">
+                <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6">
                     <h3 className="text-white font-bold mb-6 flex items-center gap-2">
                         <PieChart size={18} className="text-zinc-500"/> Distribución de Planes
                     </h3>
-                    <ResponsiveContainer width="100%" height={300}>
-                        <RePieChart>
-                            <Pie
-                                data={planDistribution}
-                                cx="50%"
-                                cy="50%"
-                                innerRadius={60}
-                                outerRadius={80}
-                                paddingAngle={5}
-                                dataKey="value"
-                                animationBegin={400}
-                            >
-                                {planDistribution.map((_: any, index: number) => (
-                                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                                ))}
-                            </Pie>
-                            <Tooltip contentStyle={{ backgroundColor: '#18181b', borderColor: '#27272a', color: '#fff', borderRadius: '8px' }} />
-                            <Legend verticalAlign="bottom" height={36} iconType="circle" />
-                        </RePieChart>
-                    </ResponsiveContainer>
+                    <div style={{ height: '300px', width: '100%' }}>
+                        <ResponsiveContainer width="100%" height="100%">
+                            <RePieChart>
+                                <Pie
+                                    data={planDistribution}
+                                    cx="50%"
+                                    cy="50%"
+                                    innerRadius={60}
+                                    outerRadius={80}
+                                    paddingAngle={5}
+                                    dataKey="value"
+                                    animationBegin={400}
+                                >
+                                    {planDistribution.map((_: any, index: number) => (
+                                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                                    ))}
+                                </Pie>
+                                <Tooltip contentStyle={{ backgroundColor: '#18181b', borderColor: '#27272a', color: '#fff', borderRadius: '8px' }} />
+                                <Legend verticalAlign="bottom" height={36} iconType="circle" />
+                            </RePieChart>
+                        </ResponsiveContainer>
+                    </div>
                 </div>
             </div>
         </div>
