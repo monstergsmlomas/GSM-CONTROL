@@ -9,7 +9,7 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "server": "tsx server/index.ts",
-    "start": "mkdir -p /app/.wwebjs_auth && node dist/server/index.js"
+    "start": "node dist/index.js"
   },
   "dependencies": {
     "@tailwindcss/postcss": "^4.1.18",
