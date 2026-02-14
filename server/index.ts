@@ -19,13 +19,15 @@ app.use(cors());
 app.use(express.json());
 
 // Middlewares
-
 app.use((req, res, next) => {
     // Skip for non-api routes
     if (!req.path.startsWith('/api')) return next();
-    
-    // Header check relaxed: if missing, routes will use default DATABASE_URL from .env
     next();
+});
+
+// GET /api/health
+app.get("/api/health", (req, res) => {
+    res.json({ status: "ok", time: new Date().toISOString() });
 });
 
 // GET /api/logs
@@ -114,7 +116,7 @@ app.get("/api/users", async (req, res) => {
         const dbUrl = (req.headers['x-db-url'] as string) || process.env.DATABASE_URL;
         if (!dbUrl) throw new Error("DATABASE_URL not configured");
         const db = getDb(dbUrl);
-        
+        console.log(`[DEBUG] Attempting to fetch users from: ${dbUrl.substring(0, 20)}...`);
         let allWithSettings;
         try {
             allWithSettings = await db.select({
@@ -123,6 +125,8 @@ app.get("/api/users", async (req, res) => {
             })
             .from(users)
             .leftJoin(settings, sql`${users.id}::text = ${settings.userId}`);
+            
+            console.log(`[DEBUG] Database returned ${allWithSettings.length} rows from users JOIN settings.`);
         } catch (joinError: any) {
             console.error("⚠️ Error joining with settings, falling back to basic users fetch:", joinError.message);
             try {
@@ -321,12 +325,20 @@ app.get("/api/check-db", async (req, res) => {
         const db = getDb(dbUrl);
         
         const allUsers = await db.select().from(users);
+        const allSettings = await db.select().from(settings);
+        let allLogs = [];
+        try { allLogs = await db.select().from(audit_logs); } catch (e) { console.log("audit_logs missing"); }
         
         res.json({
             status: "Conectado",
-            total_users: allUsers.length,
-            database_url_active: true,
-            emails_encontrados: allUsers.map(u => u.email)
+            db_prefix: dbUrl.split('@')[1]?.substring(0, 15),
+            counts: {
+                users: allUsers.length,
+                settings: allSettings.length,
+                audit_logs: allLogs.length
+            },
+            sample_user: allUsers[0]?.email || "Ninguno",
+            database_url_active: true
         });
     } catch (error: any) {
         console.error("Error in check-db:", error);
@@ -335,6 +347,31 @@ app.get("/api/check-db", async (req, res) => {
             message: error.message,
             database_url_active: !!process.env.DATABASE_URL 
         });
+    }
+});
+
+// GET /api/debug-tables
+app.get("/api/debug-tables", async (req, res) => {
+    try {
+        const dbUrl = (req.headers['x-db-url'] as string) || process.env.DATABASE_URL;
+        if (!dbUrl) return res.status(400).json({ error: "No DB URL" });
+        const db = getDb(dbUrl);
+        
+        const tables = ['users', 'settings', 'audit_logs'];
+        const results: any = {};
+        
+        for (const table of tables) {
+            try {
+                const query = await db.execute(sql.raw(`SELECT count(*) as count FROM ${table}`));
+                results[table] = query.rows[0];
+            } catch (e: any) {
+                results[table] = { error: e.message };
+            }
+        }
+        
+        res.json({ results, env_db: !!process.env.DATABASE_URL });
+    } catch (error: any) {
+        res.status(500).json({ error: error.message });
     }
 });
 
@@ -350,6 +387,30 @@ app.get(/^(?!\/api).+/, (req, res) => {
 
 // 4. Encendido del motor
 const PORT = Number(process.env.PORT) || 3000;
-app.listen(PORT, '0.0.0.0', () => {
+app.listen(PORT, '0.0.0.0', async () => {
     console.log(`🚀 Servidor en línea en puerto ${PORT}`);
+    
+    // Diagnóstico de arranque profundo
+    try {
+        const dbUrl = process.env.DATABASE_URL;
+        if (dbUrl) {
+            const db = getDb(dbUrl);
+            console.log("🔍 [Arranque] Verificando tablas en Supabase...");
+            
+            // Probar usuarios
+            try {
+                const uCount = await db.execute(sql.raw(`SELECT count(*) FROM users`));
+                console.log(`📊 [Arranque] Tabla 'users': ${uCount.rows[0].count} registros.`);
+            } catch (e: any) { console.log("❌ [Arranque] Tabla 'users' no encontrada o inaccesible."); }
+
+            // Probar clientes (posible nombre alternativo)
+            try {
+                const cCount = await db.execute(sql.raw(`SELECT count(*) FROM clients`));
+                console.log(`📊 [Arranque] Tabla 'clients': ${cCount.rows[0].count} registros.`);
+            } catch (e: any) { console.log("ℹ️ [Arranque] Tabla 'clients' no detectada."); }
+
+        }
+    } catch (e: any) {
+        console.error("❌ [Arranque] Error de diagnóstico:", e.message);
+    }
 });
