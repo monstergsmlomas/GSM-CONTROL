@@ -30,6 +30,7 @@ export const getDb = (connectionString?: string) => {
       max: 10,
       idleTimeoutMillis: 30000,
       connectionTimeoutMillis: 5000,
+      options: "-c search_path=public"
     });
 
     pool.on('error', (err) => {

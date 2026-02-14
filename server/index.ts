@@ -390,53 +390,53 @@ app.get(/^(?!\/api).+/, (req, res) => {
 });
 
 // 4. Encendido del motor
-const PORT = Number(process.env.PORT) || 3000;
+const PORT = Number(process.env.PORT) || 5000;
+console.log(`🚀 Intentando arrancar servidor en puerto ${PORT}...`);
+
 app.listen(PORT, '0.0.0.0', async () => {
-    console.log(`🚀 Servidor en línea en puerto ${PORT}`);
+    console.log(`✅ Servidor en línea en puerto ${PORT} (0.0.0.0)`);
     
-    // Diagnóstico de arranque profundo
-    try {
-        const dbUrl = process.env.DATABASE_URL;
-        if (dbUrl) {
-            // Masked log of DB URL
-            const maskedUrl = dbUrl.replace(/:([^:@]+)@/, ':****@');
-            console.log(`🔗 [Arranque] DATABASE_URL: ${maskedUrl}`);
-            
-            const db = getDb(dbUrl);
-            
-            // Log de nombre de la base de datos
-            try {
-                const dbNameRes = await db.execute(sql.raw(`SELECT current_database()`));
-                console.log(`📡 [Arranque] Conectado a la base de datos: ${dbNameRes.rows[0].current_database}`);
-            } catch (e) { console.log("❌ [Arranque] No se pudo obtener el nombre de la DB."); }
+    // Diagnóstico de arranque profundo (NON-BLOCKING)
+    console.log("🔍 [Arranque] Iniciando diagnóstico de base de datos...");
+    
+    const dbDiscovery = async () => {
+        try {
+            const dbUrl = process.env.DATABASE_URL;
+            if (dbUrl) {
+                const maskedUrl = dbUrl.replace(/:([^:@]+)@/, ':****@');
+                console.log(`🔗 [Arranque] DATABASE_URL detectada: ${maskedUrl}`);
+                
+                const db = getDb(dbUrl);
+                
+                try {
+                    const dbNameRes = await db.execute(sql.raw(`SELECT current_database()`));
+                    console.log(`📡 [Arranque] Conectado a la base de datos: ${dbNameRes.rows[0].current_database}`);
+                } catch (e) { console.log("⚠️ [Arranque] No se pudo obtener el nombre de la DB."); }
 
-            console.log("🔍 [Arranque] Verificando inventario de tablas en 'public'...");
-            try {
-                const tablesListRes = await db.execute(sql.raw(`
-                    SELECT table_name 
-                    FROM information_schema.tables 
-                    WHERE table_schema = 'public'
-                `));
-                const tableNames = tablesListRes.rows.map((r: any) => r.table_name);
-                console.log(`📑 [Arranque] Tablas encontradas: ${tableNames.join(", ") || "NINGUNA"}`);
-            } catch (e: any) { console.log("❌ [Arranque] Falló el listado de tablas:", e.message); }
+                console.log("📂 [Arranque] Verificando inventario de tablas en 'public'...");
+                try {
+                    const tablesListRes = await db.execute(sql.raw(`
+                        SELECT table_name 
+                        FROM information_schema.tables 
+                        WHERE table_schema = 'public'
+                    `));
+                    const tableNames = tablesListRes.rows.map((r: any) => r.table_name);
+                    console.log(`📑 [Arranque] Tablas encontradas: ${tableNames.join(", ") || "NINGUNA"}`);
+                    
+                    if (tableNames.includes('users')) {
+                        const uCount = await db.execute(sql.raw(`SELECT count(*) as count FROM users`));
+                        console.log(`📊 [Arranque] Conteo en 'users': ${uCount.rows[0].count}`);
+                    }
+                } catch (e: any) { console.log("❌ [Arranque] Falló el listado de tablas:", e.message); }
 
-            // Probar usuarios (esquema implícito)
-            try {
-                const uCount = await db.execute(sql.raw(`SELECT count(*) as count FROM users`));
-                console.log(`📊 [Arranque] Conteo en 'users': ${uCount.rows[0].count}`);
-            } catch (e: any) { console.log(`❌ [Arranque] Tabla 'users' inaccesible.`); }
-
-            // Probar usuarios (esquema explícito public)
-            try {
-                const upCount = await db.execute(sql.raw(`SELECT count(*) as count FROM public.users`));
-                console.log(`📊 [Arranque] Conteo en 'public.users': ${upCount.rows[0].count}`);
-            } catch (e: any) { console.log(`❌ [Arranque] Tabla 'public.users' inaccesible.`); }
-
-        } else {
-            console.log("⚠️ [Arranque] No se encontró DATABASE_URL en el entorno.");
+            } else {
+                console.log("⚠️ [Arranque] No se encontró DATABASE_URL en el entorno.");
+            }
+        } catch (e: any) {
+            console.error("❌ [Arranque] Error en diagnóstico (No crítico):", e.message);
         }
-    } catch (e: any) {
-        console.error("❌ [Arranque] Error crítico de diagnóstico:", e.message);
-    }
+    };
+
+    // Run discovery without blocking the main event loop
+    dbDiscovery();
 });
