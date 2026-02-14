@@ -2,12 +2,12 @@ import pkg from 'whatsapp-web.js';
 const { Client, LocalAuth } = pkg;
 import qrcode from 'qrcode-terminal';
 
-let client: Client;
+// Usamos 'any' para evitar conflictos con la importación especial
+let client: any;
 
 export const initWhatsApp = () => {
     console.log("🚀 [WhatsApp] Inicializando cliente...");
     
-    // @ts-ignore - LocalAuth expects certain types that pkg might not export cleanly in TS
     client = new Client({
         authStrategy: new LocalAuth({
             dataPath: './.wwebjs_auth'
@@ -18,7 +18,7 @@ export const initWhatsApp = () => {
         }
     });
 
-    client.on('qr', (qr) => {
+    client.on('qr', (qr: string) => {
         console.log('✨ [WhatsApp] NUEVO CÓDIGO QR DETECTADO. ESCANEA PARA VINCULAR:');
         qrcode.generate(qr, { small: true });
     });
@@ -31,11 +31,11 @@ export const initWhatsApp = () => {
         console.log('🔓 [WhatsApp] Autenticado correctamente.');
     });
 
-    client.on('auth_failure', (msg) => {
+    client.on('auth_failure', (msg: string) => {
         console.error('❌ [WhatsApp] Error de autenticación:', msg);
     });
 
-    client.initialize().catch(err => {
+    client.initialize().catch((err: any) => {
         console.error('❌ [WhatsApp] Error al inicializar:', err);
     });
 };
@@ -47,14 +47,13 @@ export const sendWhatsAppMessage = async (to: string, message: string) => {
             return false;
         }
 
-        // Formatear el número (eliminar espacios, +, etc.)
         const formattedNumber = to.replace(/\D/g, '');
         const chatId = `${formattedNumber}@c.us`;
         
         await client.sendMessage(chatId, message);
         console.log(`📨 [WhatsApp] Mensaje enviado a ${formattedNumber}`);
         return true;
-    } catch (error) {
+    } catch (error: any) {
         console.error(`❌ [WhatsApp] Error enviando a ${to}:`, error);
         return false;
     }
