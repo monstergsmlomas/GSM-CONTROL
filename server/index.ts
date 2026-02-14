@@ -111,34 +111,55 @@ app.get("/api/users", async (req, res) => {
         })
         .from(users)
         .leftJoin(settings, sql`${users.id}::text = ${settings.userId}`);
+
+        console.log(`Found ${allWithSettings.length} users with settings join.`);
         
         const mappedUsers = allWithSettings.map(({ user: u, setting: s }) => {
-            const planRaw = (u.plan || 'Estandar').toLowerCase();
-            let planMapped = 'Estandar';
-            if (planRaw.includes('premium')) planMapped = 'Premium AI';
-            else if (planRaw.includes('multi')) planMapped = 'Multisede';
-            else if (planRaw.includes('free')) planMapped = 'Free';
-            else if (planRaw.includes('estandar')) planMapped = 'Estandar';
+            try {
+                if (!u) return null;
+                
+                // Fallback email split safely
+                const emailStr = u.email || "";
+                const nombreBase = emailStr ? emailStr.split('@')[0] : 'Usuario';
 
-            return {
-                id: u.id,
-                email: u.email,
-                nombre: u.email.split('@')[0], 
-                fechaAlta: u.trialEndsAt ? new Date(u.trialEndsAt).toISOString() : new Date().toISOString(),
-                trialEndsAt: u.trialEndsAt ? new Date(u.trialEndsAt).toISOString() : null,
-                subscriptionStatus: (u.subscriptionStatus || 'expired').toLowerCase() as 'active' | 'trialing' | 'expired',
-                plan: planMapped as any,
-                cicloDePago: (u.cicloDePago || 'mensual') as any,
-                sucursalesExtra: u.sucursalesExtra || 0,
-                currentPeriodEnd: u.currentPeriodEnd ? new Date(u.currentPeriodEnd).toISOString() : null,
-                telefono: s?.phone || ''
-            };
-        });
+                const planRaw = (u.plan || 'Estandar').toLowerCase();
+                let planMapped = 'Estandar';
+                if (planRaw.includes('premium')) planMapped = 'Premium AI';
+                else if (planRaw.includes('multi')) planMapped = 'Multisede';
+                else if (planRaw.includes('free')) planMapped = 'Free';
+                else if (planRaw.includes('estandar')) planMapped = 'Estandar';
+
+                return {
+                    id: u.id,
+                    email: emailStr,
+                    nombre: nombreBase, 
+                    fechaAlta: u.trialEndsAt ? new Date(u.trialEndsAt).toISOString() : new Date().toISOString(),
+                    trialEndsAt: u.trialEndsAt ? new Date(u.trialEndsAt).toISOString() : null,
+                    subscriptionStatus: (u.subscriptionStatus || 'expired').toLowerCase() as 'active' | 'trialing' | 'expired',
+                    plan: planMapped as any,
+                    cicloDePago: (u.cicloDePago || 'mensual') as any,
+                    sucursalesExtra: u.sucursalesExtra || 0,
+                    currentPeriodEnd: u.currentPeriodEnd ? new Date(u.currentPeriodEnd).toISOString() : null,
+                    telefono: s?.phone || "" // Garantizar string vacío si es nulo
+                };
+            } catch (err) {
+                console.error("Error mapping individual user row:", err);
+                return null;
+            }
+        }).filter(Boolean);
 
         res.json(mappedUsers);
     } catch (error: any) {
-        console.error("Error fetching users:", error);
-        res.status(500).json({ error: "Failed to fetch users", details: error.message });
+        console.error("CRITICAL ERROR in GET /api/users:");
+        console.error("- Message:", error.message);
+        console.error("- Table info: users (id uuid), settings (user_id text, phone text)");
+        console.error("- Stack Trace:", error.stack);
+        
+        res.status(500).json({ 
+            error: "Failed to fetch users from database", 
+            details: error.message,
+            diagnostic: "Please check if columns id (uuid) and user_id (text) exist in your Supabase tables."
+        });
     }
 });
 
@@ -208,7 +229,15 @@ app.patch("/api/users/:id", async (req, res) => {
         .leftJoin(settings, sql`${users.id}::text = ${settings.userId}`)
         .where(eq(users.id, id));
 
+        if (results.length === 0) {
+            return res.status(404).json({ error: "User not found after update" });
+        }
+
         const { user: u, setting: s } = results[0];
+        
+        if (!u) {
+            return res.status(404).json({ error: "User data is missing" });
+        }
         
         const planRaw = (u.plan || 'Estandar').toLowerCase();
         let planMapped = 'Estandar';
