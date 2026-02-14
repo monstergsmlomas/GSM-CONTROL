@@ -22,7 +22,8 @@ export const initWhatsApp = () => {
                 '--no-zygote',
                 '--disable-gpu'
             ],
-            timeout: 60000
+            timeout: 60000,
+            protocolTimeout: 300000 // <-- Le damos 5 minutos de tolerancia al servidor
         }
     });
 
