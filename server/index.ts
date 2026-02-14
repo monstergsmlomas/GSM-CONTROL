@@ -18,10 +18,6 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// 2. Servir archivos estáticos
-const distPath = path.resolve(__dirname, '../dist');
-app.use(express.static(distPath));
-
 // Middlewares
 
 app.use((req, res, next) => {
@@ -295,18 +291,18 @@ app.get("/api/check-db", async (req, res) => {
     }
 });
 
-// 3. Catch-all definitivo para Express 5 (Compatible con Railway)
-app.get('*', (req, res) => {
-    // Si es una petición de API que no existía, 404
-    if (req.path.startsWith('/api')) {
-        return res.status(404).json({ error: 'API route not found' });
-    }
-    // Para todo lo demás, enviamos el index.html
+// 2. Servir estáticos (Carpeta dist)
+const distPath = path.resolve(__dirname, '../dist');
+app.use(express.static(distPath));
+
+// 3. LA SOLUCIÓN DEFINITIVA PARA EXPRESS 5:
+// Usamos una expresión regular que captura absolutamente todo (.*)
+app.get(/^(?!\/api).+/, (req, res) => {
     res.sendFile(path.join(distPath, 'index.html'));
 });
 
-// 4. Puerto dinámico
+// 4. Encendido del motor
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, '0.0.0.0', () => {
-    console.log(`🚀 Server running on port ${PORT}`);
+    console.log(`🚀 Servidor en línea en puerto ${PORT}`);
 });
