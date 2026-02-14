@@ -6,13 +6,15 @@ let client: any;
 let isReady = false;
 
 export const initWhatsApp = () => {
-    console.log("🚀 [WhatsApp] Iniciando con persistencia en /app/.wwebjs_auth...");
+    // Definimos la ruta EXACTA que configuraste en Railway
+    const sessionPath = '/app/.wwebjs_auth';
+    
+    console.log(`🚀 [WhatsApp] Iniciando sesión en volumen: ${sessionPath}`);
     
     client = new Client({
         authStrategy: new LocalAuth({ 
-            // CAMBIO CLAVE: Usamos la ruta absoluta del volumen de Railway
-            clientId: "gsm-fix-session",
-            dataPath: '/app/.wwebjs_auth' 
+            clientId: "gsm-fix-session", // ID fijo para la subcarpeta
+            dataPath: sessionPath 
         }),
         webVersionCache: {
             type: 'remote',
@@ -27,33 +29,26 @@ export const initWhatsApp = () => {
                 '--disable-accelerated-2d-canvas',
                 '--no-first-run',
                 '--no-zygote',
-                '--single-process', // Ahorra mucha RAM en Railway
-                '--disable-gpu',
-                '--disable-extensions'
+                '--single-process', 
+                '--disable-gpu'
             ],
-            executablePath: process.env.CHROME_PATH || undefined,
             timeout: 120000,
         }
     });
 
     client.on('qr', (qr: string) => {
-        console.log('✨ [WhatsApp] NUEVO QR: Escanealo por ÚLTIMA vez.');
+        console.log('✨ [WhatsApp] QR NUEVO: Escanealo por ÚLTIMA vez.');
         qrcode.generate(qr, { small: true });
         console.log(`https://api.qrserver.com/v1/create-qr-code/?size=400x400&data=${encodeURIComponent(qr)}`);
     });
 
     client.on('ready', () => {
         isReady = true;
-        console.log('✅ [WhatsApp] Cliente listo y conectado!');
+        console.log('✅ [WhatsApp] ¡BOT CONECTADO Y LISTO!');
     });
 
     client.on('authenticated', () => {
-        console.log('🔓 [WhatsApp] Sesión autenticada. Guardando en volumen...');
-    });
-
-    client.on('disconnected', (reason: any) => {
-        isReady = false;
-        console.log('⚠️ [WhatsApp] Desconectado. Razón:', reason);
+        console.log('🔓 [WhatsApp] Sesión autenticada. Escribiendo archivos en el volumen...');
     });
 
     client.initialize().catch((err: any) => console.error('❌ Error fatal:', err));
@@ -62,17 +57,13 @@ export const initWhatsApp = () => {
 export const sendWhatsAppMessage = async (to: string, message: string) => {
     try {
         if (!client || !isReady) return false;
-
         const cleanNumber = to.replace(/\D/g, '');
         const chatId = `${cleanNumber}@c.us`;
-
+        
         console.log(`📨 [WhatsApp] Enviando a ${cleanNumber}...`);
-        
-        // El secreto: un pequeño delay para evitar el error de "detached Frame"
-        await new Promise(resolve => setTimeout(resolve, 3000));
+        await new Promise(resolve => setTimeout(resolve, 3000)); // Espera de seguridad
         await client.sendMessage(chatId, message);
-        
-        console.log(`✅ [WhatsApp] Enviado con éxito.`);
+        console.log(`✅ [WhatsApp] Mensaje enviado correctamente.`);
         return true;
     } catch (error: any) {
         console.error(`💥 [WhatsApp] Fallo:`, error.message);
