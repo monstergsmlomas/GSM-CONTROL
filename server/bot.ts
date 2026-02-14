@@ -1,5 +1,3 @@
-Antigravity, por favor reemplaza todo el contenido del archivo `bot.ts` (o el archivo que contiene la configuración de whatsapp-web.js) con este código. Hemos eliminado `executablePath` para evitar deadlocks en Railway y añadido el evento `loading_screen` para tener un diagnóstico en tiempo real:
-
 import pkg from 'whatsapp-web.js';
 const { Client, LocalAuth } = pkg;
 import qrcode from 'qrcode-terminal';
@@ -14,7 +12,6 @@ export const initWhatsApp = () => {
             dataPath: './.wwebjs_auth'
         }),
         puppeteer: {
-            // Se elimina executablePath para usar el motor nativo y evitar bloqueos
             headless: true,
             args: [
                 '--no-sandbox',
@@ -26,11 +23,10 @@ export const initWhatsApp = () => {
                 '--single-process',
                 '--disable-gpu'
             ],
-            timeout: 60000 // 60 segundos de tolerancia para encender en la nube
+            timeout: 60000
         }
     });
 
-    // NUEVO RADAR: Esto nos avisará si el navegador invisible realmente se abrió
     client.on('loading_screen', (percent: string, message: string) => {
         console.log(`⏳ [WhatsApp] Cargando Web: ${percent}% - ${message}`);
     });
