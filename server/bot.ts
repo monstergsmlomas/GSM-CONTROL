@@ -5,12 +5,17 @@ import qrcode from 'qrcode-terminal';
 let client: any;
 
 export const initWhatsApp = () => {
-    console.log("🚀 [WhatsApp] Encendiendo motores... (Esto puede demorar en Railway)");
+    console.log("🚀 [WhatsApp] Encendiendo motores...");
     
     client = new Client({
         authStrategy: new LocalAuth({
             dataPath: './.wwebjs_auth'
         }),
+        // ESTO ES LO QUE SOLUCIONA EL "PENDING" ETERNO:
+        webVersionCache: {
+            type: 'remote',
+            remotePath: 'https://raw.githubusercontent.com/wppconnect-team/wa-version/main/html/2.2412.54.html',
+        },
         puppeteer: {
             headless: true,
             args: [
@@ -23,7 +28,7 @@ export const initWhatsApp = () => {
                 '--disable-gpu'
             ],
             timeout: 60000,
-            protocolTimeout: 300000 // <-- Le damos 5 minutos de tolerancia al servidor
+            protocolTimeout: 300000
         }
     });
 
@@ -34,8 +39,6 @@ export const initWhatsApp = () => {
     client.on('qr', (qr: string) => {
         console.log('✨ [WhatsApp] NUEVO CÓDIGO QR DETECTADO.');
         qrcode.generate(qr, { small: true });
-        
-        console.log('🔗 SI EL QR SE VE DEFORMADO, HAZ CLIC EN ESTE ENLACE PARA VERLO PERFECTO:');
         console.log(`https://api.qrserver.com/v1/create-qr-code/?size=400x400&data=${encodeURIComponent(qr)}`);
     });
 
@@ -43,37 +46,20 @@ export const initWhatsApp = () => {
         console.log('✅ [WhatsApp] Cliente listo y conectado!');
     });
 
-    client.on('authenticated', () => {
-        console.log('🔓 [WhatsApp] Autenticado correctamente.');
+    console.log("⏳ [WhatsApp] Iniciando cliente...");
+    client.initialize().catch((err: any) => {
+        console.error('❌ [WhatsApp] Error al inicializar:', err);
     });
-
-    client.on('auth_failure', (msg: string) => {
-        console.error('❌ [WhatsApp] Error de autenticación:', msg);
-    });
-
-    client.on('disconnected', (reason: any) => {
-        console.log('⚠️ [WhatsApp] Bot desconectado. Razón:', reason);
-    });
-
-    console.log("⏳ [WhatsApp] Iniciando cliente (Esperando al navegador invisible)...");
-    
-    client.initialize()
-        .then(() => console.log("🏁 [WhatsApp] Comando de inicialización finalizado."))
-        .catch((err: any) => {
-            console.error('❌ [WhatsApp] Error FATAL al inicializar:', err);
-        });
 };
 
 export const sendWhatsAppMessage = async (to: string, message: string) => {
     try {
-        if (!client) {
-            console.error("❌ [WhatsApp] Cliente no inicializado.");
-            return false;
-        }
+        if (!client) return false;
 
         const formattedNumber = to.replace(/\D/g, '');
         const chatId = `${formattedNumber}@c.us`;
         
+        // Enviamos el mensaje
         await client.sendMessage(chatId, message);
         console.log(`📨 [WhatsApp] Mensaje enviado a ${formattedNumber}`);
         return true;
