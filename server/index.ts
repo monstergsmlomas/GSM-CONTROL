@@ -182,17 +182,24 @@ app.get("/api/users", async (req, res) => {
                 else if (planRaw.includes('free')) planMapped = 'Free';
                 else if (planRaw.includes('estandar')) planMapped = 'Estandar';
 
+                // TRUCO CLAVE: Leer tanto camelCase (Drizzle) como snake_case (Raw SQL de Supabase)
+                const rawTrialEndsAt = u.trialEndsAt || u.trial_ends_at;
+                const rawSubscriptionStatus = u.subscriptionStatus || u.subscription_status || 'expired';
+                const rawCicloDePago = u.cicloDePago || u.ciclo_de_pago || 'mensual';
+                const rawSucursalesExtra = u.sucursalesExtra !== undefined ? u.sucursalesExtra : (u.sucursales_extra || 0);
+                const rawCurrentPeriodEnd = u.currentPeriodEnd || u.current_period_end;
+
                 return {
                     id: u.id,
                     email: emailStr,
                     nombre: nombreBase, 
-                    fechaAlta: u.trialEndsAt ? new Date(u.trialEndsAt).toISOString() : new Date().toISOString(),
-                    trialEndsAt: u.trialEndsAt ? new Date(u.trialEndsAt).toISOString() : null,
-                    subscriptionStatus: (u.subscriptionStatus || 'expired').toLowerCase() as 'active' | 'trialing' | 'expired',
+                    fechaAlta: rawTrialEndsAt ? new Date(rawTrialEndsAt).toISOString() : new Date().toISOString(),
+                    trialEndsAt: rawTrialEndsAt ? new Date(rawTrialEndsAt).toISOString() : null,
+                    subscriptionStatus: String(rawSubscriptionStatus).toLowerCase() as 'active' | 'trialing' | 'expired',
                     plan: planMapped as any,
-                    cicloDePago: (u.cicloDePago || 'mensual') as any,
-                    sucursalesExtra: u.sucursalesExtra || 0,
-                    currentPeriodEnd: u.currentPeriodEnd ? new Date(u.currentPeriodEnd).toISOString() : null,
+                    cicloDePago: String(rawCicloDePago) as any,
+                    sucursalesExtra: Number(rawSucursalesExtra),
+                    currentPeriodEnd: rawCurrentPeriodEnd ? new Date(rawCurrentPeriodEnd).toISOString() : null,
                     telefono: s?.phone || "" // Garantizar string vacío si es nulo
                 };
             } catch (err) {
