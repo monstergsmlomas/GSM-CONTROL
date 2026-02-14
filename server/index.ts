@@ -32,17 +32,17 @@ app.use((req, res, next) => {
 app.get("/api/logs", async (req, res) => {
     try {
         const dbUrl = (req.headers['x-db-url'] as string) || process.env.DATABASE_URL;
-        if (!dbUrl) throw new Error("DATABASE_URL not configured");
+        if (!dbUrl) return res.json([]);
         const db = getDb(dbUrl);
         
         const logs = await db.select()
             .from(audit_logs)
             .orderBy(desc(audit_logs.fecha));
         
-        res.json(logs);
+        return res.json(logs);
     } catch (error: any) {
-        console.error("Error fetching logs (Returning empty array):", error);
-        res.json([]); // Return empty array instead of 500
+        console.error("Non-fatal error fetching logs (Returning []):", error.message);
+        return res.json([]);
     }
 });
 
@@ -115,7 +115,7 @@ app.get("/api/users", async (req, res) => {
             setting: settings
         })
         .from(users)
-        .leftJoin(settings, eq(sql`${users.id}::text`, settings.userId));
+        .leftJoin(settings, sql`${users.id}::text = ${settings.userId}`);
 
         console.log(`Found ${allWithSettings.length} users with settings join.`);
         
@@ -235,7 +235,7 @@ app.patch("/api/users/:id", async (req, res) => {
             setting: settings
         })
         .from(users)
-        .leftJoin(settings, eq(sql`${users.id}::text`, settings.userId))
+        .leftJoin(settings, sql`${users.id}::text = ${settings.userId}`)
         .where(eq(users.id, id));
 
         if (results.length === 0) {
@@ -266,7 +266,7 @@ app.patch("/api/users/:id", async (req, res) => {
             cicloDePago: (u.cicloDePago || 'mensual') as any,
             sucursalesExtra: u.sucursalesExtra || 0,
             currentPeriodEnd: u.currentPeriodEnd ? new Date(u.currentPeriodEnd).toISOString() : null,
-            telefono: s?.phone || ''
+            telefono: s?.phone || ""
         };
 
         res.json(mappedUser);
@@ -340,7 +340,7 @@ app.get(/^(?!\/api).+/, (req, res) => {
 });
 
 // 4. Encendido del motor
-const PORT = process.env.PORT || 3000;
+const PORT = Number(process.env.PORT) || 3000;
 app.listen(PORT, '0.0.0.0', () => {
     console.log(`🚀 Servidor en línea en puerto ${PORT}`);
 });
