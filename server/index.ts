@@ -14,13 +14,11 @@ import { users, audit_logs, settings } from "./schema";
 import { eq, desc, sql } from "drizzle-orm";
 
 const app = express();
-const PORT = process.env.PORT || 5000;
 
 app.use(cors());
 app.use(express.json());
 
-// Serve static files from the frontend build folder
-app.use(express.static(path.resolve(__dirname, "../dist")));
+// Middlewares
 
 app.use((req, res, next) => {
     // Skip for non-api routes
@@ -293,13 +291,22 @@ app.get("/api/check-db", async (req, res) => {
     }
 });
 
-// Catch-all route to serve the frontend index.html for any non-API routes
-app.get("*", (req, res) => {
-    if (!req.path.startsWith('/api')) {
-        res.sendFile(path.resolve(__dirname, "../dist/index.html"));
+// 2. Configuración de archivos estáticos (Busca donde termina tu última ruta de API)
+const distPath = path.join(__dirname, '../dist');
+app.use(express.static(distPath));
+
+// 3. El catch-all para React Router (Debe ir DESPUÉS de todas las rutas /api)
+app.get('*', (req, res) => {
+    // Si la ruta empieza con /api y llegó hasta aquí, es que no existe
+    if (req.path.startsWith('/api')) {
+        return res.status(404).json({ error: 'Ruta de API no encontrada' });
     }
+    // Para todo lo demás, servimos el index.html del frontend
+    res.sendFile(path.join(distPath, 'index.html'));
 });
 
+// 4. El puerto dinámico para Railway
+const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-  console.log(`SERVER RUNNING ON http://localhost:${PORT}`);
+    console.log(`🚀 Servidor operativo en puerto ${PORT}`);
 });
