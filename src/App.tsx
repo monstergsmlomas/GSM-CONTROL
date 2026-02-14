@@ -29,9 +29,10 @@ export default function App() {
   const [errorLine, setErrorLine] = useState<string | null>(null);
 
   const [whatsappTemplate, setWhatsappTemplate] = useState('Hola {nombre}, Soporte GSM-FIX te contacta. Tu estado de cuenta es: {estado}.');
-  
-  // NUEVO: ESTADO PARA LA META DE INGRESOS (1 Millón por defecto)
   const [mrrTarget, setMrrTarget] = useState(1000000); 
+  
+  // NUEVO: ESTADO PARA LA ALERTA DE VENCIMIENTO (48 horas por defecto)
+  const [alertThreshold, setAlertThreshold] = useState(48);
 
   const handleLogin = (e: React.FormEvent) => {
       e.preventDefault();
@@ -85,9 +86,12 @@ export default function App() {
         const savedTemplate = localStorage.getItem('whatsapp_template');
         if (savedTemplate) setWhatsappTemplate(savedTemplate);
 
-        // NUEVO: CARGAR META GUARDADA
         const savedTarget = localStorage.getItem('mrr_target');
         if (savedTarget) setMrrTarget(Number(savedTarget));
+
+        // NUEVO: CARGAR ALERTA GUARDADA
+        const savedThreshold = localStorage.getItem('alert_threshold');
+        if (savedThreshold) setAlertThreshold(Number(savedThreshold));
 
         return () => clearInterval(interval);
     }
@@ -185,10 +189,14 @@ export default function App() {
           setWhatsappTemplate(data.whatsappTemplate);
           localStorage.setItem('whatsapp_template', data.whatsappTemplate);
       }
-      // NUEVO: GUARDAR META
       if (data.mrrTarget) {
           setMrrTarget(data.mrrTarget);
           localStorage.setItem('mrr_target', data.mrrTarget.toString());
+      }
+      // NUEVO: GUARDAR ALERTA
+      if (data.alertThreshold) {
+          setAlertThreshold(data.alertThreshold);
+          localStorage.setItem('alert_threshold', data.alertThreshold.toString());
       }
   };
 
@@ -258,18 +266,19 @@ export default function App() {
                         onCycleStatus={handleCycleStatus} 
                         onDeleteUser={handleDeleteUser}
                         whatsappTemplate={whatsappTemplate} 
+                        alertThreshold={alertThreshold} // PASAMOS LA ALERTA A USUARIOS
                     />;
         case 'audit': 
             return <ControlFlujo logs={logs} partners={partners} />;
         case 'metrics': 
-            // NUEVO: LE PASAMOS LA META A LAS MÉTRICAS
             return <Metricas users={users} mrrTarget={mrrTarget} />;
         case 'settings': 
             return <Configuracion 
                         onSave={handleSaveConfig} 
                         initialPartners={partners} 
                         initialWhatsappTemplate={whatsappTemplate}
-                        initialMrrTarget={mrrTarget} // PASAMOS LA META A LA CONFIGURACIÓN
+                        initialMrrTarget={mrrTarget}
+                        initialAlertThreshold={alertThreshold} // PASAMOS LA ALERTA A CONFIG
                     />;
         default: 
             return <Dashboard 

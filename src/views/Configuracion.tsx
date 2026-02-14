@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { 
     Settings, Shield, Save, Key, User, 
-    CheckCircle2, PieChart, AlertTriangle, Edit2, Check, X, MessageCircle, Target 
+    CheckCircle2, PieChart, AlertTriangle, Edit2, Check, X, MessageCircle, Target, Bell 
 } from 'lucide-react';
 import type { Partner } from '../types';
 
@@ -9,10 +9,11 @@ interface ConfiguracionProps {
     onSave: (data: any) => void;
     initialPartners?: Partner[];
     initialWhatsappTemplate?: string;
-    initialMrrTarget?: number; // NUEVA PROP
+    initialMrrTarget?: number;
+    initialAlertThreshold?: number; // NUEVA PROP
 }
 
-export default function Configuracion({ onSave, initialPartners, initialWhatsappTemplate, initialMrrTarget }: ConfiguracionProps) {
+export default function Configuracion({ onSave, initialPartners, initialWhatsappTemplate, initialMrrTarget, initialAlertThreshold }: ConfiguracionProps) {
     const [loading, setLoading] = useState(false);
     const [success, setSuccess] = useState(false);
 
@@ -29,9 +30,10 @@ export default function Configuracion({ onSave, initialPartners, initialWhatsapp
     const [pinMessage, setPinMessage] = useState({ type: '', text: '' });
 
     const [whatsappTemplate, setWhatsappTemplate] = useState(initialWhatsappTemplate || '');
-    
-    // ESTADO DE LA META
     const [mrrTarget, setMrrTarget] = useState<number>(initialMrrTarget || 1000000);
+    
+    // NUEVO: ESTADO PARA LA ALERTA
+    const [alertThreshold, setAlertThreshold] = useState<number>(initialAlertThreshold || 48);
 
     const totalShares = partners.reduce((sum, p) => sum + (editingId === p.id && tempPartner ? tempPartner.share : p.share), 0);
     const isShareValid = Math.abs(totalShares - 100) < 0.1;
@@ -89,8 +91,8 @@ export default function Configuracion({ onSave, initialPartners, initialWhatsapp
         setTimeout(() => {
             setLoading(false);
             setSuccess(true);
-            // ENVIAMOS LA META PARA GUARDARLA
-            onSave({ partners, whatsappTemplate, mrrTarget }); 
+            // ENVIAMOS alertThreshold PARA QUE SE GUARDE
+            onSave({ partners, whatsappTemplate, mrrTarget, alertThreshold }); 
             setTimeout(() => setSuccess(false), 3000);
         }, 800);
     };
@@ -180,7 +182,6 @@ export default function Configuracion({ onSave, initialPartners, initialWhatsapp
                         ))}
                     </div>
 
-                    {/* NUEVO: META FINANCIERA (Debajo de los socios) */}
                     <div className="mt-6 pt-4 border-t border-zinc-800">
                         <label className="text-[10px] font-black text-emerald-500 uppercase tracking-widest flex items-center gap-2 mb-2">
                             <Target size={12} /> Meta de Ingresos Mensual (MRR Target)
@@ -278,35 +279,59 @@ export default function Configuracion({ onSave, initialPartners, initialWhatsapp
                     </div>
                 </div>
 
-                {/* 3. COMUNICACIONES (WhatsApp) */}
+                {/* 3. COMUNICACIONES Y ALERTAS (Rediseñado en 2 columnas) */}
                 <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6 shadow-lg lg:col-span-2">
                     <div className="flex items-center gap-3 mb-6 pb-4 border-b border-zinc-800">
-                        <div className="p-2 bg-emerald-500/10 rounded-lg"><MessageCircle className="text-emerald-500" size={20} /></div>
+                        <div className="p-2 bg-amber-500/10 rounded-lg"><Bell className="text-amber-500" size={20} /></div>
                         <div>
-                            <h3 className="text-lg font-bold text-white">Plantilla de WhatsApp</h3>
-                            <p className="text-xs text-zinc-500">Mensaje automático para contactar clientes rápidamente.</p>
+                            <h3 className="text-lg font-bold text-white">Comunicaciones y Alertas</h3>
+                            <p className="text-xs text-zinc-500">Reglas de automatización para avisos y mensajería.</p>
                         </div>
                     </div>
-                    <div className="space-y-4">
-                        <div className="bg-zinc-950 p-5 rounded-xl border border-zinc-800">
-                            <p className="text-[10px] text-zinc-400 mb-3 font-black uppercase tracking-widest">Variables Dinámicas (Haz clic para copiar o escríbelas):</p>
-                            <div className="flex gap-2 mb-4 flex-wrap">
-                                <span className="px-2 py-1 bg-zinc-800/50 rounded-lg text-xs font-bold text-indigo-400 border border-zinc-700 select-all">{'{nombre}'}</span>
-                                <span className="px-2 py-1 bg-zinc-800/50 rounded-lg text-xs font-bold text-emerald-400 border border-zinc-700 select-all">{'{plan}'}</span>
-                                <span className="px-2 py-1 bg-zinc-800/50 rounded-lg text-xs font-bold text-amber-400 border border-zinc-700 select-all">{'{estado}'}</span>
-                            </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                        {/* Selector de Horas */}
+                        <div>
+                            <label className="text-[10px] font-black text-amber-500 uppercase tracking-widest flex items-center gap-2 mb-3">
+                                <Bell size={12} /> Activar etiqueta "URGENTE" a las:
+                            </label>
+                            <select 
+                                value={alertThreshold}
+                                onChange={(e) => setAlertThreshold(Number(e.target.value))}
+                                className="w-full bg-zinc-950 border border-zinc-800 text-white text-sm rounded-lg px-4 py-3 focus:border-amber-500 focus:outline-none transition-colors appearance-none cursor-pointer"
+                            >
+                                <option value={24}>24 Horas antes del vencimiento</option>
+                                <option value={48}>48 Horas antes del vencimiento</option>
+                                <option value={72}>72 Horas (3 días) antes</option>
+                                <option value={120}>120 Horas (5 días) antes</option>
+                                <option value={168}>168 Horas (1 semana) antes</option>
+                            </select>
+                            <p className="text-[10px] text-zinc-500 mt-2">
+                                Cuando un cliente entre en este margen de tiempo, su nombre titilará en amarillo en la lista de usuarios.
+                            </p>
+                        </div>
+
+                        {/* Plantilla WhatsApp */}
+                        <div>
+                            <label className="text-[10px] font-black text-emerald-500 uppercase tracking-widest flex items-center gap-2 mb-3">
+                                <MessageCircle size={12} /> Plantilla Base de WhatsApp
+                            </label>
                             <textarea 
                                 value={whatsappTemplate}
                                 onChange={(e) => setWhatsappTemplate(e.target.value)}
-                                className="w-full h-24 bg-zinc-900 border border-zinc-700 text-white text-sm rounded-lg px-4 py-3 focus:border-emerald-500 focus:outline-none transition-colors resize-none leading-relaxed"
-                                placeholder="Escribe tu mensaje aquí... Ej: Hola {nombre}, tu plan {plan} está en estado {estado}."
+                                className="w-full h-24 bg-zinc-950 border border-zinc-800 text-white text-sm rounded-lg px-4 py-3 focus:border-emerald-500 focus:outline-none transition-colors resize-none leading-relaxed"
+                                placeholder="Escribe tu mensaje aquí..."
                             />
+                            <div className="flex gap-2 mt-2 flex-wrap">
+                                <span className="px-1.5 py-0.5 bg-zinc-800/50 rounded text-[10px] font-bold text-indigo-400 border border-zinc-700">{'{nombre}'}</span>
+                                <span className="px-1.5 py-0.5 bg-zinc-800/50 rounded text-[10px] font-bold text-emerald-400 border border-zinc-700">{'{plan}'}</span>
+                                <span className="px-1.5 py-0.5 bg-zinc-800/50 rounded text-[10px] font-bold text-amber-400 border border-zinc-700">{'{estado}'}</span>
+                            </div>
                         </div>
                     </div>
                 </div>
             </div>
 
-            {/* BOTÓN FLOTANTE DE GUARDADO GENERAL */}
             <div className="flex justify-end pt-4 sticky bottom-6 z-20">
                 <button onClick={handleSaveAll} disabled={loading} className={`flex items-center gap-2 px-8 py-3 rounded-xl font-bold text-sm shadow-xl transition-all transform hover:scale-[1.02] border ${success ? 'bg-emerald-600 border-emerald-500 text-white' : 'bg-white border-white text-black hover:bg-zinc-200'}`}>
                     {loading ? 'Guardando...' : success ? <><CheckCircle2 size={18} /> ¡Configuración Guardada!</> : <><Save size={18} /> Guardar Cambios Generales</>}

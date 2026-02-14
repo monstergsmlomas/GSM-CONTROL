@@ -11,12 +11,12 @@ interface UsuariosProps {
     users: DashboardUser[];
     isLoading: boolean;
     onRefresh: () => void;
-    // AQUÍ ESTÁ LA CORRECCIÓN: Agregamos telefono?: string al final
     onUpdateStatus: (data: { userId: string, newStatus: 'active' | 'trialing' | 'expired', trialEndsAt?: string, currentPeriodEnd?: string, cicloDePago?: string, sucursalesExtra?: number, plan?: string, telefono?: string }) => void;
     onToggleStatus: (userId: string) => void;
     onCycleStatus: (userId: string) => void;
     onDeleteUser: (userId: string) => void;
     whatsappTemplate: string;
+    alertThreshold: number; // NUEVA PROP
 }
 
 const StatusBadge = ({ status }: { status: string }) => {
@@ -47,7 +47,7 @@ const PlanBadge = ({ plan }: { plan: string }) => {
     );
 };
 
-const Usuarios = ({ users, isLoading, onRefresh, onUpdateStatus, onToggleStatus, onCycleStatus, onDeleteUser, whatsappTemplate }: UsuariosProps) => {
+const Usuarios = ({ users, isLoading, onRefresh, onUpdateStatus, onToggleStatus, onCycleStatus, onDeleteUser, whatsappTemplate, alertThreshold }: UsuariosProps) => {
     const [searchTerm, setSearchTerm] = useState('');
     const [filterStatus, setFilterStatus] = useState('Todos');
     const [editingUser, setEditingUser] = useState<DashboardUser | null>(null);
@@ -80,7 +80,8 @@ const Usuarios = ({ users, isLoading, onRefresh, onUpdateStatus, onToggleStatus,
         const diffHours = (expiry - now) / (1000 * 60 * 60);
 
         if (diffHours < 0) return 'text-rose-500';
-        if (diffHours <= 48) return 'text-amber-400 animate-pulse';
+        // AQUÍ USAMOS EL VALOR ELEGIDO EN LA CONFIGURACIÓN
+        if (diffHours <= alertThreshold) return 'text-amber-400 animate-pulse';
         return 'text-zinc-100';
     };
 
