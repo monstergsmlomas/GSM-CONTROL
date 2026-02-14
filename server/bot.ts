@@ -25,8 +25,12 @@ export const initWhatsApp = () => {
     });
 
     client.on('qr', (qr: string) => {
-        console.log('✨ [WhatsApp] NUEVO CÓDIGO QR DETECTADO. ESCANEA PARA VINCULAR:');
+        console.log('✨ [WhatsApp] NUEVO CÓDIGO QR DETECTADO.');
         qrcode.generate(qr, { small: true });
+        
+        // ESTA ES LA MAGIA NUEVA:
+        console.log('🔗 SI EL QR SE VE DEFORMADO, HAZ CLIC EN ESTE ENLACE PARA VERLO PERFECTO:');
+        console.log(`https://api.qrserver.com/v1/create-qr-code/?size=400x400&data=${encodeURIComponent(qr)}`);
     });
 
     client.on('ready', () => {
