@@ -1,4 +1,3 @@
-
 import { pgTable, text, timestamp, uuid, boolean, integer } from "drizzle-orm/pg-core";
 
 export const users = pgTable("users", {
@@ -12,6 +11,7 @@ export const users = pgTable("users", {
   isAutoRenew: boolean("is_auto_renew").default(true),
   cicloDePago: text("ciclo_de_pago").default("mensual"), // mensual, semestral, anual
   sucursalesExtra: integer("sucursales_extra").default(0),
+  telefono: text("telefono"), // <--- Línea agregada para sincronizar con la DB real
   lastSeen: timestamp("last_seen").defaultNow(),
 });
 
