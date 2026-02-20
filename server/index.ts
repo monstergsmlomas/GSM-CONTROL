@@ -536,14 +536,15 @@ app.post("/api/bot-settings", async (req, res) => {
     }
 });
 
-// 2. Servir estáticos (Carpeta dist)
-const distPath = path.resolve(__dirname, '../dist');
+// 2. Servir estáticos (Carpeta dist de Vite)
+const distPath = path.join(process.cwd(), 'dist');
 app.use(express.static(distPath));
 
-// 3. LA SOLUCIÓN DEFINITIVA PARA EXPRESS 5:
-// Usamos una expresión regular que captura absolutamente todo (.*)
-app.get(/^\/(?!api).+/, (req, res) => {
-    res.sendFile(path.join(distPath, 'index.html'));
+// 3. Enrutar todo al Frontend (Ignorando la API)
+app.get('*', (req, res) => {
+    if (!req.path.startsWith('/api')) {
+        res.sendFile(path.join(distPath, 'index.html'));
+    }
 });
 
 // POST /api/bot/welcome - VERSION DIAGNOSTICO
