@@ -1,5 +1,4 @@
-import pkg from 'whatsapp-web.js';
-const { Client, LocalAuth } = pkg;
+import { makeWASocket, useMultiFileAuthState, DisconnectReason } from '@whiskeysockets/baileys';
 import qrcode from 'qrcode-terminal';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -7,73 +6,79 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-let client: any;
+let clientSocket: any = null;
 let isReady = false;
 
-export const initWhatsApp = () => {
-    // CORRECCIÓN RENDER: Usamos una ruta relativa al proyecto para que funcione en cualquier lado
-    const sessionPath = path.resolve(__dirname, '../../.wwebjs_auth');
-    
-    console.log(`🚀 [WhatsApp] Iniciando sesión en: ${sessionPath}`);
-    
-    client = new Client({
-        authStrategy: new LocalAuth({ 
-            clientId: "gsm-fix-session",
-            dataPath: sessionPath 
-        }),
-        webVersionCache: {
-            type: 'remote',
-            remotePath: 'https://raw.githubusercontent.com/wppconnect-team/wa-version/main/html/2.2412.54.html',
-        },
-        puppeteer: {
-            headless: true,
-            // Argumentos ULTRA-LIGHT para el plan gratuito de Render
-            args: [
-                '--no-sandbox',
-                '--disable-setuid-sandbox',
-                '--disable-dev-shm-usage',
-                '--single-process', 
-                '--no-zygote',
-                '--disable-gpu',
-                '--disable-extensions',
-                '--no-first-run'
-            ],
-            timeout: 60000,
-        }
-    });
+export const initWhatsApp = async () => {
+    // Baileys guarda la sesión en una carpeta para no pedirte el QR cada vez que reiniciás
+    const sessionPath = path.resolve(__dirname, '../../.baileys_auth');
+    console.log(`🚀 [WhatsApp] Iniciando sesión (Modo Ligero) en: ${sessionPath}`);
 
-    client.on('qr', (qr: string) => {
-        console.log('✨ [WhatsApp] QR NUEVO: Escanealo para vincular.');
-        qrcode.generate(qr, { small: true });
-        // Mantenemos el link por si no se ve bien el QR en la consola de Render
-        console.log(`Link para ver QR: https://api.qrserver.com/v1/create-qr-code/?size=400x400&data=${encodeURIComponent(qr)}`);
-    });
+    const { state, saveCreds } = await useMultiFileAuthState(sessionPath);
 
-    client.on('ready', () => {
-        isReady = true;
-        console.log('✅ [WhatsApp] ¡BOT CONECTADO Y LISTO!');
-    });
+    const connectToWhatsApp = () => {
+        const sock = makeWASocket({
+            auth: state,
+            printQRInTerminal: false, // Lo imprimimos nosotros para armar el link también
+            browser: ['GSM-FIX Bot', 'Chrome', '1.0.0'],
+        });
 
-    client.on('authenticated', () => {
-        console.log('🔓 [WhatsApp] Sesión autenticada correctamente.');
-    });
+        clientSocket = sock;
 
-    client.initialize().catch((err: any) => console.error('❌ Error fatal en el bot:', err));
+        // Guardar credenciales cada vez que cambian
+        sock.ev.on('creds.update', saveCreds);
+
+        // Escuchar cambios en la conexión
+        sock.ev.on('connection.update', (update) => {
+            const { connection, lastDisconnect, qr } = update;
+
+            if (qr) {
+                console.log('✨ [WhatsApp] QR NUEVO: Escanealo para vincular.');
+                qrcode.generate(qr, { small: true });
+                console.log(`Link para ver QR: https://api.qrserver.com/v1/create-qr-code/?size=400x400&data=${encodeURIComponent(qr)}`);
+            }
+
+            if (connection === 'close') {
+                const statusCode = (lastDisconnect?.error as any)?.output?.statusCode;
+                const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
+                
+                console.log(`❌ [WhatsApp] Conexión cerrada. Reconectando: ${shouldReconnect}`);
+                
+                if (shouldReconnect) {
+                    connectToWhatsApp();
+                } else {
+                    console.log('🛑 [WhatsApp] Sesión cerrada desde el celular. Borrá la carpeta .baileys_auth para escanear un nuevo QR.');
+                    isReady = false;
+                }
+            } else if (connection === 'open') {
+                isReady = true;
+                console.log('✅ [WhatsApp] ¡BOT CONECTADO Y LISTO (Cero consumo de RAM)!');
+            }
+        });
+    };
+
+    connectToWhatsApp();
 };
 
 export const sendWhatsAppMessage = async (to: string, message: string) => {
     try {
-        if (!client || !isReady) return false;
+        if (!clientSocket || !isReady) {
+            console.log('⚠️ [WhatsApp] Intento de envío, pero el bot no está listo.');
+            return false;
+        }
+        
+        // Limpiamos el número y le agregamos la terminación que usa Baileys
         const cleanNumber = to.replace(/\D/g, '');
-        const chatId = `${cleanNumber}@c.us`;
+        const jid = `${cleanNumber}@s.whatsapp.net`;
         
         console.log(`📨 [WhatsApp] Enviando a ${cleanNumber}...`);
-        await new Promise(resolve => setTimeout(resolve, 3000)); 
-        await client.sendMessage(chatId, message);
+        
+        await clientSocket.sendMessage(jid, { text: message });
+        
         console.log(`✅ [WhatsApp] Mensaje enviado correctamente.`);
         return true;
     } catch (error: any) {
-        console.error(`💥 [WhatsApp] Fallo:`, error.message);
+        console.error(`💥 [WhatsApp] Fallo al enviar:`, error.message);
         return false;
     }
 };
