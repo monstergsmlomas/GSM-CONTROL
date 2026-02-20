@@ -1,8 +1,8 @@
 import cron from 'node-cron';
-import { getDb } from './db';
-import { users, settings, bot_settings } from './schema';
+import { getDb } from './db.js';
+import { users, settings, bot_settings } from './schema.js';
 import { eq, sql, and, or, inArray, isNotNull } from 'drizzle-orm';
-import { sendWhatsAppMessage } from './bot';
+import { sendWhatsAppMessage } from './bot.js';
 
 export const startCronJobs = () => {
     console.log("⏰ [Cron] Configurando automatizaciones de WhatsApp (10:00 AM)...");
