@@ -34,11 +34,13 @@ export default function Dashboard({ users, logs, isLoading, setCurrentView }: Da
     const totalRevenue = logs.reduce((acc, log) => acc + (log.monto || 0), 0);
     const activeUsersFromMetrics = users.filter(u => u.subscriptionStatus === 'active').length;
     const totalUsersFromMetrics = users.length;
-   
+    
     const recentLogs = [...logs].sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime()).slice(0, 5);
+    
+    // CORRECCIÓN: Ahora ordena por la fecha de última modificación (updatedAt) en lugar de fechaAlta
     const recentUsers = Array.isArray(users) ? [...users].sort((a, b) => {
-        const dateA = a.fechaAlta ? new Date(a.fechaAlta).getTime() : 0;
-        const dateB = b.fechaAlta ? new Date(b.fechaAlta).getTime() : 0;
+        const dateA = a.updatedAt ? new Date(a.updatedAt).getTime() : (a.fechaAlta ? new Date(a.fechaAlta).getTime() : 0);
+        const dateB = b.updatedAt ? new Date(b.updatedAt).getTime() : (b.fechaAlta ? new Date(b.fechaAlta).getTime() : 0);
         return dateB - dateA;
     }).slice(0, 5) : [];
 
@@ -47,7 +49,7 @@ export default function Dashboard({ users, logs, isLoading, setCurrentView }: Da
         { name: 'Feb', total: totalRevenue * 0.35 },
         { name: 'Mar', total: totalRevenue * 0.45 },
     ];
-   
+    
     const planDistribution = [
         { name: 'Estandar', value: users.filter(u => u.plan === 'Estandar').length },
         { name: 'Multisede', value: users.filter(u => u.plan === 'Multisede').length },
@@ -142,7 +144,7 @@ export default function Dashboard({ users, logs, isLoading, setCurrentView }: Da
                                                 <div className="text-xs text-zinc-500">{log.detalle}</div>
                                             </td>
                                             <td className="p-4 text-right">
-                                                <div className="text-emerald-400 font-mono font-medium">+${(log.monto || 0).toLocaleString()}</div>
+                                                <div className="text-emerald-400 font-mono font-medium">{"+$" + (log.monto || 0).toLocaleString()}</div>
                                                 <div className="text-xs text-zinc-600 flex items-center justify-end gap-1">
                                                     <Clock size={10} />
                                                     {new Date(log.fecha).toLocaleDateString()}
@@ -160,7 +162,7 @@ export default function Dashboard({ users, logs, isLoading, setCurrentView }: Da
                 <div className="bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden flex flex-col">
                     <div className="p-5 border-b border-zinc-800 flex justify-between items-center bg-zinc-950/30">
                         <h3 className="font-bold text-white flex items-center gap-2">
-                            <Users size={18} className="text-indigo-500"/> Nuevos Usuarios
+                            <Users size={18} className="text-indigo-500"/> Usuarios Modificados Recientemente
                         </h3>
                         <button onClick={() => setCurrentView('users')} className="text-xs text-zinc-400 hover:text-white transition-colors">Gestionar</button>
                     </div>
@@ -172,7 +174,7 @@ export default function Dashboard({ users, logs, isLoading, setCurrentView }: Da
                                             <td className="p-4">
                                                 <div className="flex items-center gap-3">
                                                     <div className="w-8 h-8 rounded-full bg-zinc-800 flex items-center justify-center text-xs font-bold text-zinc-400 border border-zinc-700">
-                                                        {user.nombre.substring(0,2).toUpperCase()}
+                                                        {(user.nombre || 'U').substring(0,2).toUpperCase()}
                                                     </div>
                                                     <div>
                                                         <div className="text-zinc-200 font-medium">{user.nombre}</div>

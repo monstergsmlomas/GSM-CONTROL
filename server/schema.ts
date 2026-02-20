@@ -13,6 +13,7 @@ export const users = pgTable("users", {
   sucursalesExtra: integer("sucursales_extra").default(0),
   telefono: text("telefono"), // <--- Línea agregada para sincronizar con la DB real
   lastSeen: timestamp("last_seen").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
 });
 
 export const settings = pgTable("settings", {

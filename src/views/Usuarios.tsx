@@ -206,6 +206,12 @@ const Usuarios = ({ users, isLoading, onRefresh, onUpdateStatus, onToggleStatus,
                                                     <Calendar size={12} className={user.subscriptionStatus === 'trialing' ? 'text-amber-500' : 'text-zinc-600'} />
                                                     Trial: {user.trialEndsAt ? new Date(user.trialEndsAt).toLocaleDateString() : 'N/A'}
                                                 </div>
+                                                {user.updatedAt && (
+                                                  <div className="flex items-center gap-2 mt-1 text-[10px] text-zinc-500 font-mono">
+                                                    <span className="text-blue-400">❖</span>
+                                                    <span>Editado: {new Date(user.updatedAt).toLocaleString('es-AR')}</span>
+                                                  </div>
+                                                )}
                                             </div>
                                         </td>
                                         <td className="px-6 py-4 text-right">

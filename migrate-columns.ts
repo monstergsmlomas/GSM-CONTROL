@@ -45,6 +45,16 @@ async function migrate() {
       console.error("❌ Error adding 'last_seen':", e.message);
     }
 
+    console.log("Adding 'updated_at' column...");
+    try {
+      await client.query(
+        `ALTER TABLE public.users ADD COLUMN IF NOT EXISTS updated_at timestamp with time zone DEFAULT now();`,
+      );
+      console.log("✅ 'updated_at' column added (or already exists).");
+    } catch (e: any) {
+      console.error("❌ Error adding 'updated_at':", e.message);
+    }
+
     client.release();
     await pool.end();
   } catch (e: any) {

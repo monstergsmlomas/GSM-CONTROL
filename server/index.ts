@@ -1,4 +1,3 @@
-
 import dotenv from "dotenv";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -145,7 +144,8 @@ app.get("/api/users", async (req, res) => {
                 setting: settings
             })
             .from(users)
-            .leftJoin(settings, sql`${users.id}::text = ${settings.userId}`);
+            .leftJoin(settings, sql`${users.id}::text = ${settings.userId}`)
+            .orderBy(desc(users.updatedAt));
         } catch (joinError: any) {
             console.warn("⚠️ Error en query estándar, intentando fallback de esquema explícito...");
             try {
@@ -154,6 +154,7 @@ app.get("/api/users", async (req, res) => {
                     SELECT u.*, s.phone as "setting_phone"
                     FROM public.users u
                     LEFT JOIN public.settings s ON u.id::text = s.user_id
+                    ORDER BY u.updated_at DESC NULLS LAST
                 `));
                 allWithSettings = rawUsers.rows.map((r: any) => ({
                     user: r,
@@ -200,6 +201,7 @@ app.get("/api/users", async (req, res) => {
                     cicloDePago: String(rawCicloDePago) as any,
                     sucursalesExtra: Number(rawSucursalesExtra),
                     currentPeriodEnd: rawCurrentPeriodEnd ? new Date(rawCurrentPeriodEnd).toISOString() : null,
+                    updatedAt: (u.updatedAt || u.updated_at) ? new Date(u.updatedAt || u.updated_at).toISOString() : null,
                     telefono: s?.phone || "" // Garantizar string vacío si es nulo
                 };
             } catch (err) {
@@ -226,28 +228,49 @@ app.patch("/api/users/:id", async (req, res) => {
         const db = getDb(dbUrl);
 
         const updateData: any = {};
-        let logDetail = "Se modificaron datos del usuario.";
         
-        if (subscriptionStatus) {
-            updateData.subscriptionStatus = subscriptionStatus;
-            logDetail = `Se modificó el estado a ${subscriptionStatus} para el ID ${id}`;
-        }
+        console.log(`[PATCH DEBUG] ID: ${id}`);
+        console.log(`[PATCH DEBUG] Payload:`, JSON.stringify(req.body, null, 2));
 
-        if (trialEndsAt) {
-            const translatedDate = new Date(trialEndsAt);
-            updateData.trialEndsAt = translatedDate;
-            logDetail += ` y trial a ${trialEndsAt}`;
+        let logDetail = "Se modificaron datos del usuario.";
+        const now = new Date();
+        
+        // --- INICIO DE LA LÓGICA INTELIGENTE ---
+        if (subscriptionStatus === 'expired') {
+            // 1. Si apretás "Expirado" a mano: Fuerza la etiqueta y CADUCA la fecha al instante (le pone fecha de ayer).
+            updateData.subscriptionStatus = 'expired';
+            updateData.trialEndsAt = new Date(now.getTime() - 24 * 60 * 60 * 1000); // 24hs en el pasado
+            logDetail = `Se forzó estado Expirado y se caducó el trial para el ID ${id}`;
+        } else {
+            // 2. Si elegís Activo o Prueba
+            if (subscriptionStatus) {
+                updateData.subscriptionStatus = subscriptionStatus;
+                logDetail = `Se modificó el estado a ${subscriptionStatus} para el ID ${id}`;
+            }
             
-            const now = new Date();
-            if (translatedDate > now && (!subscriptionStatus || subscriptionStatus === 'expired')) {
-                updateData.subscriptionStatus = 'trialing';
+            // 3. Lógica de fechas
+            if (trialEndsAt) {
+                const translatedDate = new Date(trialEndsAt);
+                updateData.trialEndsAt = translatedDate;
+                logDetail += ` y trial a ${trialEndsAt}`;
+                
+                // Si pones una fecha vieja a mano, se auto-expira
+                if (translatedDate < now) {
+                    updateData.subscriptionStatus = 'expired';
+                } else if (!subscriptionStatus) {
+                    // Si la fecha es futura y no forzaron estado, vuelve a trialing
+                    updateData.subscriptionStatus = 'trialing';
+                }
             }
         }
+        // --- FIN DE LA LÓGICA INTELIGENTE ---
 
         if (ciclo_de_pago) updateData.cicloDePago = ciclo_de_pago;
         if (sucursales_extra !== undefined) updateData.sucursalesExtra = sucursales_extra;
         if (currentPeriodEnd) updateData.currentPeriodEnd = new Date(currentPeriodEnd);
         if (plan) updateData.plan = plan;
+
+        console.log(`[PATCH DEBUG] Final updateData:`, JSON.stringify(updateData, null, 2));
 
         await db.update(users)
             .set(updateData)
@@ -267,7 +290,7 @@ app.patch("/api/users/:id", async (req, res) => {
         try {
             await db.insert(audit_logs).values({
                 accion: 'Actualización de Cliente',
-                detalle: `Cambio de estado a ${subscriptionStatus || 'N/A'}`,
+                detalle: logDetail,
                 responsable: responsable || "Sistema",
                 monto: 0,
                 fecha: new Date()

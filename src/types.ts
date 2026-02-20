@@ -13,6 +13,7 @@ export interface DashboardUser {
   sucursalesExtra?: number;
   currentPeriodEnd?: string | null;
   telefono?: string; // NUEVO CAMPO
+  updatedAt?: string | null;
 }
 
 export interface AuditLog {
