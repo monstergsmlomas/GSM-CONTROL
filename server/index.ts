@@ -540,11 +540,9 @@ app.post("/api/bot-settings", async (req, res) => {
 const distPath = path.join(process.cwd(), 'dist');
 app.use(express.static(distPath));
 
-// 3. Enrutar todo al Frontend (Ignorando la API)
-app.get('*', (req, res) => {
-    if (!req.path.startsWith('/api')) {
-        res.sendFile(path.join(distPath, 'index.html'));
-    }
+// 3. Enrutar todo al Frontend (Ignorando la API) - VERSIÓN EXPRESS 5
+app.get(/^(?!\/api).*/, (req, res) => {
+    res.sendFile(path.join(distPath, 'index.html'));
 });
 
 // POST /api/bot/welcome - VERSION DIAGNOSTICO
