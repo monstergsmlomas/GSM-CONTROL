@@ -1,4 +1,4 @@
-import { makeWASocket, useMultiFileAuthState, DisconnectReason } from '@whiskeysockets/baileys';
+import { makeWASocket, useMultiFileAuthState, DisconnectReason, Browsers } from '@whiskeysockets/baileys';
 import qrcode from 'qrcode-terminal';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -20,7 +20,11 @@ export const initWhatsApp = async () => {
         const sock = makeWASocket({
             auth: state,
             printQRInTerminal: false, // Lo imprimimos nosotros para armar el link también
-            browser: ['GSM-FIX Bot', 'Chrome', '1.0.0'],
+            // 1. El disfraz oficial de Mac para que WhatsApp no nos bloquee silenciosamente
+            browser: Browsers.macOS('Desktop'),
+            // 2. Prohibimos que baje chats viejos (¡Esto evita que se congele al escanear!)
+            syncFullHistory: false,
+            generateHighQualityLinkPreview: false
         });
 
         clientSocket = sock;
@@ -36,6 +40,10 @@ export const initWhatsApp = async () => {
                 console.log('✨ [WhatsApp] QR NUEVO: Escanealo para vincular.');
                 qrcode.generate(qr, { small: true });
                 console.log(`Link para ver QR: https://api.qrserver.com/v1/create-qr-code/?size=400x400&data=${encodeURIComponent(qr)}`);
+            }
+            
+            if (connection === 'connecting') {
+                console.log('⏳ [WhatsApp] Negociando conexión con los servidores...');
             }
 
             if (connection === 'close') {
