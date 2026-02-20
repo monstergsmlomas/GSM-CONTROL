@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Lock, ShieldCheck } from 'lucide-react'; 
+import { Lock, ShieldCheck, Menu } from 'lucide-react'; 
 import Sidebar from './components/Sidebar';
 import Dashboard from './views/Dashboard';
 import Usuarios from './views/Usuarios';
@@ -14,7 +14,9 @@ export default function App() {
   const [loginForm, setLoginForm] = useState({ user: '', pin: '' });
   const [loginError, setLoginError] = useState('');
 
-  const [sidebarOpen] = useState(true);
+  // 1. ESTADO INTELIGENTE: Abierto en PC (>768px), cerrado en Celular
+  const [sidebarOpen, setSidebarOpen] = useState(window.innerWidth > 768);
+  
   const [currentView, setCurrentView] = useState('dashboard');
   
   const [users, setUsers] = useState<DashboardUser[]>([]);
@@ -31,7 +33,6 @@ export default function App() {
   const [whatsappTemplate, setWhatsappTemplate] = useState('Hola {nombre}, Soporte GSM-FIX te contacta. Tu estado de cuenta es: {estado}.');
   const [mrrTarget, setMrrTarget] = useState(1000000); 
   
-  // NUEVO: ESTADO PARA LA ALERTA DE VENCIMIENTO (48 horas por defecto)
   const [alertThreshold, setAlertThreshold] = useState(48);
 
   const handleLogin = (e: React.FormEvent) => {
@@ -89,11 +90,23 @@ export default function App() {
         const savedTarget = localStorage.getItem('mrr_target');
         if (savedTarget) setMrrTarget(Number(savedTarget));
 
-        // NUEVO: CARGAR ALERTA GUARDADA
         const savedThreshold = localStorage.getItem('alert_threshold');
         if (savedThreshold) setAlertThreshold(Number(savedThreshold));
 
-        return () => clearInterval(interval);
+        // 2. Listener para adaptar la pantalla si rotan el celular o achican la ventana
+        const handleResize = () => {
+            if (window.innerWidth <= 768) {
+                setSidebarOpen(false);
+            } else {
+                setSidebarOpen(true);
+            }
+        };
+        window.addEventListener('resize', handleResize);
+
+        return () => {
+            clearInterval(interval);
+            window.removeEventListener('resize', handleResize);
+        };
     }
   }, [isLoggedIn]);
 
@@ -193,7 +206,6 @@ export default function App() {
           setMrrTarget(data.mrrTarget);
           localStorage.setItem('mrr_target', data.mrrTarget.toString());
       }
-      // NUEVO: GUARDAR ALERTA
       if (data.alertThreshold) {
           setAlertThreshold(data.alertThreshold);
           localStorage.setItem('alert_threshold', data.alertThreshold.toString());
@@ -202,7 +214,7 @@ export default function App() {
 
   if (!isLoggedIn) {
       return (
-          <div className="flex h-screen bg-[#09090b] items-center justify-center font-sans">
+          <div className="flex h-screen bg-[#09090b] items-center justify-center font-sans px-4">
               <div className="bg-zinc-900 border border-zinc-800 p-8 rounded-2xl shadow-2xl w-full max-w-sm relative overflow-hidden">
                   <div className="absolute top-0 left-0 w-full h-1 bg-indigo-500"></div>
                   <div className="flex justify-center mb-6">
@@ -266,7 +278,7 @@ export default function App() {
                         onCycleStatus={handleCycleStatus} 
                         onDeleteUser={handleDeleteUser}
                         whatsappTemplate={whatsappTemplate} 
-                        alertThreshold={alertThreshold} // PASAMOS LA ALERTA A USUARIOS
+                        alertThreshold={alertThreshold} 
                     />;
         case 'audit': 
             return <ControlFlujo logs={logs} partners={partners} />;
@@ -278,7 +290,7 @@ export default function App() {
                         initialPartners={partners} 
                         initialWhatsappTemplate={whatsappTemplate}
                         initialMrrTarget={mrrTarget}
-                        initialAlertThreshold={alertThreshold} // PASAMOS LA ALERTA A CONFIG
+                        initialAlertThreshold={alertThreshold} 
                     />;
         default: 
             return <Dashboard 
@@ -291,22 +303,46 @@ export default function App() {
   };
 
   return (
-    <div className="flex h-screen bg-[#09090b] text-zinc-100 font-sans overflow-hidden">
-      <Sidebar sidebarOpen={sidebarOpen} activeTab={currentView} setActiveTab={setCurrentView} />
-      <main className="flex-1 flex flex-col overflow-hidden relative">
+    <div className="flex h-screen bg-[#09090b] text-zinc-100 font-sans overflow-hidden w-full max-w-[100vw]">
+      
+      {/* 3. PASAMOS LA NUEVA FUNCIÓN AL SIDEBAR */}
+      <Sidebar 
+          sidebarOpen={sidebarOpen} 
+          setSidebarOpen={setSidebarOpen} 
+          activeTab={currentView} 
+          setActiveTab={setCurrentView} 
+      />
+      
+      <main className="flex-1 flex flex-col overflow-hidden relative w-full">
+         
+         {/* 4. HEADER MÓVIL: Solo se ve en celulares */}
+         <div className="md:hidden flex items-center justify-between p-4 border-b border-zinc-800 bg-zinc-950 z-30 shrink-0">
+             <div className="flex items-center gap-3">
+                 <img src="/images/gsm-shield-logo.png" alt="Logo" className="h-8 w-auto" />
+                 <h1 className="text-white font-bold text-base tracking-tight">GSM-CONTROL</h1>
+             </div>
+             <button 
+                 onClick={() => setSidebarOpen(true)} 
+                 className="p-2 -mr-2 text-zinc-400 hover:text-white hover:bg-zinc-800 rounded-lg transition-colors"
+             >
+                 <Menu size={24} />
+             </button>
+         </div>
+
          {errorLine && (
-             <div className="bg-red-600 text-white px-6 py-2 flex justify-between items-center animate-in slide-in-from-top duration-300">
-                 <div className="flex items-center gap-2 text-sm font-bold">
-                     <span>⚠️ ERROR DE SINCRONIZACIÓN:</span>
-                     <span className="font-normal opacity-90">{errorLine}</span>
+             <div className="bg-red-600 text-white px-4 md:px-6 py-2 flex justify-between items-center animate-in slide-in-from-top duration-300 shrink-0">
+                 <div className="flex items-center gap-2 text-xs md:text-sm font-bold truncate mr-2">
+                     <span>⚠️ ERROR:</span>
+                     <span className="font-normal opacity-90 truncate">{errorLine}</span>
                  </div>
-                 <button onClick={() => fetchData()} className="text-xs bg-white/20 hover:bg-white/30 px-3 py-1 rounded transition-colors uppercase font-bold">
-                     Reintentar ahora
+                 <button onClick={() => fetchData()} className="text-[10px] md:text-xs bg-white/20 hover:bg-white/30 px-3 py-1 rounded transition-colors uppercase font-bold whitespace-nowrap">
+                     Reintentar
                  </button>
              </div>
          )}
          
-         <div className="flex-1 overflow-auto p-6 bg-[#09090b]">
+         {/* AJUSTAMOS EL PADDING PARA MÓVIL (p-3 o p-4 en vez de p-6) */}
+         <div className="flex-1 overflow-x-hidden overflow-y-auto p-4 md:p-6 bg-[#09090b]">
              {renderContent()}
          </div>
       </main>
