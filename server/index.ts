@@ -8,11 +8,12 @@ dotenv.config({ path: path.resolve(__dirname, "../.env") });
 
 import express from "express";
 import cors from "cors";
-import { getDb } from "./db";
-import { users, audit_logs, settings, bot_settings } from "./schema";
+// ACÁ ESTÁ LA MAGIA: Las 4 líneas con el .js agregado
+import { getDb } from "./db.js";
+import { users, audit_logs, settings, bot_settings } from "./schema.js";
 import { eq, desc, sql } from "drizzle-orm";
-import { initWhatsApp, sendWhatsAppMessage } from "./bot";
-import { startCronJobs } from "./cron";
+import { initWhatsApp, sendWhatsAppMessage } from "./bot.js";
+import { startCronJobs } from "./cron.js";
 
 const app = express();
 
