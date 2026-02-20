@@ -1,7 +1,6 @@
-
 import { drizzle } from "drizzle-orm/node-postgres";
 import pg from "pg";
-import * as schema from "./schema";
+import * as schema from "./schema.js"; // <-- ACÁ ESTÁ LA CORRECCIÓN
 import dotenv from "dotenv";
 
 dotenv.config();
