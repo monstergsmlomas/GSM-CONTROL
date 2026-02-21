@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Lock, ShieldCheck, Menu } from 'lucide-react'; 
+import { Lock, ShieldCheck, Menu, Bell } from 'lucide-react'; 
 import Sidebar from './components/Sidebar';
 import Dashboard from './views/Dashboard';
 import Usuarios from './views/Usuarios';
@@ -14,9 +14,7 @@ export default function App() {
   const [loginForm, setLoginForm] = useState({ user: '', pin: '' });
   const [loginError, setLoginError] = useState('');
 
-  // 1. ESTADO INTELIGENTE: Abierto en PC (>768px), cerrado en Celular
   const [sidebarOpen, setSidebarOpen] = useState(window.innerWidth > 768);
-  
   const [currentView, setCurrentView] = useState('dashboard');
   
   const [users, setUsers] = useState<DashboardUser[]>([]);
@@ -32,8 +30,16 @@ export default function App() {
 
   const [whatsappTemplate, setWhatsappTemplate] = useState('Hola {nombre}, Soporte GSM-FIX te contacta. Tu estado de cuenta es: {estado}.');
   const [mrrTarget, setMrrTarget] = useState(1000000); 
-  
   const [alertThreshold, setAlertThreshold] = useState(48);
+
+  // --- LÓGICA DE ALERTAS PARA EL HEADER MOBILE ---
+  const expiringCount = users.filter(user => {
+    if (user.subscriptionStatus !== 'active' && user.subscriptionStatus !== 'trialing') return false;
+    const limitDate = user.trialEndsAt || user.currentPeriodEnd;
+    if (!limitDate) return false;
+    const hoursLeft = (new Date(limitDate).getTime() - new Date().getTime()) / (1000 * 60 * 60);
+    return hoursLeft > 0 && hoursLeft <= alertThreshold;
+  }).length;
 
   const handleLogin = (e: React.FormEvent) => {
       e.preventDefault();
@@ -93,7 +99,6 @@ export default function App() {
         const savedThreshold = localStorage.getItem('alert_threshold');
         if (savedThreshold) setAlertThreshold(Number(savedThreshold));
 
-        // 2. Listener para adaptar la pantalla si rotan el celular o achican la ventana
         const handleResize = () => {
             if (window.innerWidth <= 768) {
                 setSidebarOpen(false);
@@ -305,28 +310,40 @@ export default function App() {
   return (
     <div className="flex h-screen bg-[#09090b] text-zinc-100 font-sans overflow-hidden w-full max-w-[100vw]">
       
-      {/* 3. PASAMOS LA NUEVA FUNCIÓN AL SIDEBAR */}
       <Sidebar 
           sidebarOpen={sidebarOpen} 
           setSidebarOpen={setSidebarOpen} 
           activeTab={currentView} 
           setActiveTab={setCurrentView} 
+          users={users} // <-- PASAMOS USUARIOS
+          alertThreshold={alertThreshold} // <-- PASAMOS UMBRAL
       />
       
       <main className="flex-1 flex flex-col overflow-hidden relative w-full">
          
-         {/* 4. HEADER MÓVIL: Solo se ve en celulares */}
          <div className="md:hidden flex items-center justify-between p-4 border-b border-zinc-800 bg-zinc-950 z-30 shrink-0">
              <div className="flex items-center gap-3">
                  <img src="/images/gsm-shield-logo.png" alt="Logo" className="h-8 w-auto" />
                  <h1 className="text-white font-bold text-base tracking-tight">GSM-CONTROL</h1>
              </div>
-             <button 
-                 onClick={() => setSidebarOpen(true)} 
-                 className="p-2 -mr-2 text-zinc-400 hover:text-white hover:bg-zinc-800 rounded-lg transition-colors"
-             >
-                 <Menu size={24} />
-             </button>
+             <div className="flex items-center gap-2">
+                {/* CAMPANITA DE ALERTA MOBILE */}
+                {expiringCount > 0 && (
+                    <button 
+                        onClick={() => setCurrentView('users')}
+                        className="relative p-2 text-rose-500 animate-pulse"
+                    >
+                        <Bell size={20} />
+                        <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-rose-500 rounded-full border-2 border-zinc-950"></span>
+                    </button>
+                )}
+                <button 
+                    onClick={() => setSidebarOpen(true)} 
+                    className="p-2 -mr-2 text-zinc-400 hover:text-white hover:bg-zinc-800 rounded-lg transition-colors"
+                >
+                    <Menu size={24} />
+                </button>
+             </div>
          </div>
 
          {errorLine && (
@@ -341,7 +358,6 @@ export default function App() {
              </div>
          )}
          
-         {/* AJUSTAMOS EL PADDING PARA MÓVIL (p-3 o p-4 en vez de p-6) */}
          <div className="flex-1 overflow-x-hidden overflow-y-auto p-4 md:p-6 bg-[#09090b]">
              {renderContent()}
          </div>

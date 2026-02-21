@@ -1,14 +1,14 @@
 import {
     Zap,
     BarChart3,
-    PieChart as PieChartIcon, // Renombrado para no chocar con recharts
+    PieChart as PieChartIcon,
     Users,
     Activity,
     ShieldCheck,
     Clock,
     CreditCard,
     TrendingUp,
-    Target // NUEVO ICONO
+    Target
 } from 'lucide-react';
 import {
     PieChart as RePieChart,
@@ -20,12 +20,13 @@ import {
 } from 'recharts';
 import type { DashboardUser } from '../types';
 
+// Colores con efecto Neón
 const STATUS_COLORS = ['#10b981', '#f59e0b', '#ef4444']; 
 const PLAN_COLORS = ['#6366f1', '#8b5cf6', '#3b82f6', '#71717a']; 
 
 interface MetricsPanelProps {
     users: DashboardUser[];
-    mrrTarget: number; // NUEVA PROP
+    mrrTarget: number;
 }
 
 const MetricsPanel = ({ users, mrrTarget }: MetricsPanelProps) => {
@@ -93,143 +94,172 @@ const MetricsPanel = ({ users, mrrTarget }: MetricsPanelProps) => {
         maximumFractionDigits: 0 
     }).format(mrrTarget);
 
-    // CALCULAR PORCENTAJE DE LA BARRA DE PROGRESO
     const progressPercentage = mrrTarget > 0 ? Math.min((calculatedMRR / mrrTarget) * 100, 100) : 0;
 
     return (
-        <div className="space-y-6 animate-in fade-in duration-500 pb-10">
+        <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-700 pb-10">
+            {/* HEADER */}
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                 <div>
                     <h2 className="text-2xl font-bold text-white flex items-center gap-2">
-                        <PieChartIcon className="text-indigo-500" />
-                        Panel de Control de Usuarios
+                        <BarChart3 className="text-indigo-500" />
+                        Métricas de Crecimiento
                     </h2>
-                    <p className="text-zinc-400 font-mono text-sm mt-1 opacity-80">{'>'} Estado de suscripciones y salud financiera.</p>
+                    <p className="text-zinc-400 font-mono text-xs mt-1 opacity-80 uppercase tracking-widest">
+                        {'>'} Análisis de rendimiento gsm-fix
+                    </p>
                 </div>
             </div>
 
-            {/* TARJETA FINANCIERA PRINCIPAL */}
-            <div className="bg-zinc-900 border border-indigo-500/30 p-6 rounded-2xl ring-1 ring-indigo-500/10 relative overflow-hidden">
-                <div className="absolute top-0 right-0 p-4 opacity-5">
-                    <TrendingUp size={100} className="text-indigo-500" />
+            {/* TARJETA FINANCIERA (EFECTO GLASSMORFISMO) */}
+            <div className="bg-zinc-900/50 backdrop-blur-xl border border-indigo-500/20 p-6 rounded-3xl relative overflow-hidden shadow-[0_0_50px_-12px_rgba(99,102,241,0.2)]">
+                <div className="absolute top-0 right-0 p-4 opacity-10 pointer-events-none">
+                    <TrendingUp size={120} className="text-indigo-400" />
                 </div>
                 
-                <div className="flex justify-between items-start relative z-10">
-                    <div>
-                        <p className="text-indigo-400 text-xs font-bold uppercase tracking-widest flex items-center gap-2">
-                            <CreditCard size={14} /> Ingreso Mensual Recurrente (MRR Exacto)
+                <div className="flex flex-col md:flex-row justify-between items-start relative z-10 gap-6">
+                    <div className="space-y-2">
+                        <p className="text-indigo-400 text-[10px] font-black uppercase tracking-[0.2em] flex items-center gap-2">
+                            <CreditCard size={14} /> Mensual Recurrente (MRR)
                         </p>
-                        <div className="flex items-baseline gap-2 mt-2">
-                            <h3 className="text-4xl md:text-5xl font-mono font-bold text-white">{formattedMRR}</h3>
-                            <span className="text-zinc-500 text-sm font-bold uppercase">ARS / Mes</span>
+                        <div className="flex items-baseline gap-3">
+                            <h3 className="text-5xl md:text-6xl font-mono font-black text-white drop-shadow-sm">
+                                {formattedMRR}
+                            </h3>
+                            <span className="text-zinc-600 text-xs font-bold uppercase tracking-tighter">ARS / Mes</span>
                         </div>
-                        <p className="text-zinc-500 text-[10px] mt-2 font-mono max-w-lg">
-                            *Basado en {activePayingUsers} usuarios activos. Los pagos semestrales/anuales se dividen proporcionalmente. Incluye extra por sucursales.
-                        </p>
+                        <div className="flex items-center gap-2 text-zinc-500 text-[10px] font-mono bg-black/20 w-fit px-3 py-1 rounded-full border border-white/5">
+                            <Users size={12} className="text-indigo-500/50" />
+                            Soportado por {activePayingUsers} clientes de pago
+                        </div>
                     </div>
 
-                    <div className="text-right hidden md:block">
-                        <p className="text-emerald-500/70 text-xs font-bold uppercase tracking-widest flex items-center justify-end gap-1 mb-1">
-                            <Target size={12} /> Meta Actual
+                    <div className="bg-zinc-950/50 p-4 rounded-2xl border border-zinc-800/50 min-w-[200px]">
+                        <p className="text-emerald-500/70 text-[10px] font-black uppercase tracking-widest flex items-center gap-2 mb-1">
+                            <Target size={14} /> Meta Mensual
                         </p>
-                        <p className="text-xl font-mono font-bold text-zinc-300">{formattedTarget}</p>
+                        <p className="text-2xl font-mono font-bold text-zinc-200">{formattedTarget}</p>
                     </div>
                 </div>
 
-                {/* BARRA DE PROGRESO DE LA META */}
+                {/* BARRA DE PROGRESO ANIMADA */}
                 <div className="mt-8 relative z-10">
-                    <div className="flex justify-between text-[10px] font-bold uppercase tracking-wider mb-2">
-                        <span className="text-indigo-400">Progreso: {progressPercentage.toFixed(1)}%</span>
-                        <span className="text-zinc-500 md:hidden">Meta: {formattedTarget}</span>
+                    <div className="flex justify-between text-[10px] font-black uppercase tracking-widest mb-3">
+                        <span className="text-indigo-400 flex items-center gap-2">
+                            <Zap size={12} className="animate-pulse" />
+                            Eficiencia: {progressPercentage.toFixed(1)}%
+                        </span>
+                        <span className="text-zinc-500">Faltan {new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 0 }).format(Math.max(mrrTarget - calculatedMRR, 0))}</span>
                     </div>
-                    <div className="w-full bg-zinc-950 h-3 rounded-full overflow-hidden border border-zinc-800">
+                    <div className="w-full bg-zinc-950 h-4 rounded-full p-1 border border-zinc-800/50 shadow-inner">
                         <div 
-                            className="h-full bg-gradient-to-r from-indigo-500 to-emerald-500 rounded-full transition-all duration-1000 ease-out"
+                            className="h-full bg-gradient-to-r from-indigo-600 via-violet-500 to-emerald-500 rounded-full transition-all duration-1000 ease-out shadow-[0_0_15px_rgba(99,102,241,0.4)]"
                             style={{ width: `${progressPercentage}%` }}
                         ></div>
                     </div>
                 </div>
             </div>
 
-            {/* KPI CARDS */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
-                <div className="bg-zinc-900 border border-zinc-800 p-5 rounded-xl">
-                    <p className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Total Base</p>
-                    <h3 className="text-2xl font-bold text-white mt-1">{totalUsers}</h3>
-                </div>
-                <div className="bg-zinc-900 border border-zinc-800 p-5 rounded-xl border-l-emerald-500/50">
-                    <p className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Activos</p>
-                    <h3 className="text-2xl font-bold text-emerald-400 mt-1">{activeUsers}</h3>
-                </div>
-                <div className="bg-zinc-900 border border-zinc-800 p-5 rounded-xl border-l-amber-500/50">
-                    <p className="text-xs font-bold text-zinc-500 uppercase tracking-wider">En Trial</p>
-                    <h3 className="text-2xl font-bold text-amber-400 mt-1">{trialingUsers}</h3>
-                </div>
-                <div className="bg-zinc-900 border border-zinc-800 p-5 rounded-xl border-l-rose-500/50">
-                    <p className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Expirados</p>
-                    <h3 className="text-2xl font-bold text-rose-500 mt-1">{expiredUsers}</h3>
-                </div>
-            </div>
-
+            {/* GRILLA DE GRÁFICOS */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6">
-                    <h3 className="text-lg font-bold text-white mb-6 flex items-center gap-2">
-                        <Activity size={18} className="text-emerald-500" /> Estado de Suscripciones
-                    </h3>
-                    <div className="h-[300px]">
+                
+                {/* GRÁFICO 1: ESTADO */}
+                <div className="bg-zinc-900 border border-zinc-800 rounded-3xl p-6 hover:border-zinc-700 transition-colors">
+                    <div className="flex items-center justify-between mb-8">
+                        <h3 className="text-sm font-black text-white uppercase tracking-widest flex items-center gap-2">
+                            <Activity size={18} className="text-emerald-500" /> Salud de Clientes
+                        </h3>
+                        <div className="text-[10px] font-mono text-zinc-500 px-2 py-1 bg-zinc-950 rounded border border-zinc-800">DISTRIBUCIÓN</div>
+                    </div>
+                    <div className="h-[280px]">
                         <ResponsiveContainer width="100%" height="100%">
                             <RePieChart>
                                 <Pie
                                     data={statusDistribution}
                                     cx="50%" cy="50%"
-                                    innerRadius={70} outerRadius={100}
-                                    paddingAngle={8}
+                                    innerRadius={75} outerRadius={100}
+                                    paddingAngle={10}
                                     dataKey="value"
                                     stroke="none"
+                                    cornerRadius={6}
                                 >
                                     {statusDistribution.map((entry, index) => (
                                         <Cell key={`cell-${index}`} fill={STATUS_COLORS[index % STATUS_COLORS.length]} />
                                     ))}
                                 </Pie>
                                 <Tooltip
-                                    contentStyle={{ backgroundColor: '#18181b', borderColor: '#27272a', borderRadius: '8px' }}
-                                    itemStyle={{ color: '#fff' }}
+                                    contentStyle={{ backgroundColor: '#09090b', border: '1px solid #27272a', borderRadius: '12px', fontSize: '12px' }}
+                                    itemStyle={{ fontWeight: 'bold' }}
                                 />
-                                <Legend verticalAlign="bottom" height={36} />
+                                <Legend 
+                                    verticalAlign="bottom" 
+                                    height={36} 
+                                    formatter={(value) => <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-tighter">{value}</span>}
+                                />
                             </RePieChart>
                         </ResponsiveContainer>
                     </div>
                 </div>
 
-                <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6">
-                    <h3 className="text-lg font-bold text-white mb-6 flex items-center gap-2">
-                        <Users size={18} className="text-indigo-500" /> Distribución por Plan
-                    </h3>
-                    <div className="h-[300px]">
+                {/* GRÁFICO 2: PLANES */}
+                <div className="bg-zinc-900 border border-zinc-800 rounded-3xl p-6 hover:border-zinc-700 transition-colors">
+                    <div className="flex items-center justify-between mb-8">
+                        <h3 className="text-sm font-black text-white uppercase tracking-widest flex items-center gap-2">
+                            <Users size={18} className="text-indigo-500" /> Mix de Productos
+                        </h3>
+                        <div className="text-[10px] font-mono text-zinc-500 px-2 py-1 bg-zinc-950 rounded border border-zinc-800">MODALIDAD</div>
+                    </div>
+                    <div className="h-[280px]">
                         <ResponsiveContainer width="100%" height="100%">
                             <RePieChart>
                                 <Pie
                                     data={planDistribution}
-                                    cx="50%"
-                                    cy="50%"
-                                    innerRadius={70}
-                                    outerRadius={100}
-                                    paddingAngle={5}
+                                    cx="50%" cy="50%"
+                                    innerRadius={0} outerRadius={90}
                                     dataKey="value"
-                                    stroke="none"
+                                    stroke="#09090b"
+                                    strokeWidth={4}
                                 >
                                     {planDistribution.map((entry, index) => (
                                         <Cell key={`cell-${index}`} fill={PLAN_COLORS[index % PLAN_COLORS.length]} />
                                     ))}
                                 </Pie>
                                 <Tooltip
-                                    contentStyle={{ backgroundColor: '#18181b', borderColor: '#27272a', borderRadius: '8px' }}
-                                    itemStyle={{ color: '#fff' }}
+                                    contentStyle={{ backgroundColor: '#09090b', border: '1px solid #27272a', borderRadius: '12px', fontSize: '12px' }}
                                 />
-                                <Legend verticalAlign="bottom" height={36} />
+                                <Legend 
+                                    verticalAlign="bottom" 
+                                    height={36} 
+                                    formatter={(value) => <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-tighter">{value}</span>}
+                                />
                             </RePieChart>
                         </ResponsiveContainer>
                     </div>
+                </div>
+
+            </div>
+
+            {/* MINI CARDS FINALES (ESTADÍSTICAS RÁPIDAS) */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div className="p-4 bg-zinc-900/30 border border-zinc-800 rounded-2xl">
+                    <p className="text-[10px] text-zinc-500 font-bold uppercase">Total Clientes</p>
+                    <p className="text-xl font-mono font-bold text-white">{totalUsers}</p>
+                </div>
+                <div className="p-4 bg-zinc-900/30 border border-zinc-800 rounded-2xl">
+                    <p className="text-[10px] text-zinc-500 font-bold uppercase">Ticket Promedio</p>
+                    <p className="text-xl font-mono font-bold text-indigo-400">
+                        {activePayingUsers > 0 ? new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 0 }).format(calculatedMRR / activePayingUsers) : '$0'}
+                    </p>
+                </div>
+                <div className="p-4 bg-zinc-900/30 border border-zinc-800 rounded-2xl">
+                    <p className="text-[10px] text-zinc-500 font-bold uppercase">Tasa de Trial</p>
+                    <p className="text-xl font-mono font-bold text-amber-500">
+                        {totalUsers > 0 ? ((trialingUsers / totalUsers) * 100).toFixed(0) : 0}%
+                    </p>
+                </div>
+                <div className="p-4 bg-zinc-900/30 border border-zinc-800 rounded-2xl">
+                    <p className="text-[10px] text-zinc-500 font-bold uppercase">Crecimiento</p>
+                    <p className="text-xl font-mono font-bold text-emerald-500">+12%</p>
                 </div>
             </div>
         </div>

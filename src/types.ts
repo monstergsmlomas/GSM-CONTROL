@@ -14,6 +14,7 @@ export interface DashboardUser {
   currentPeriodEnd?: string | null;
   telefono?: string; // NUEVO CAMPO
   updatedAt?: string | null;
+  lastSeen?: string | Date | null;
 }
 
 export interface AuditLog {

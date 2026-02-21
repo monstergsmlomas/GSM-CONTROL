@@ -11,14 +11,27 @@ import {
 
 interface SidebarProps {
     sidebarOpen: boolean;
-    setSidebarOpen: (open: boolean) => void; // ¡NUEVO! Necesitamos esto para cerrar en mobile
+    setSidebarOpen: (open: boolean) => void;
     activeTab: string;
     setActiveTab: (tab: string) => void;
+    users: any[]; // NUEVO: Para calcular las alertas
+    alertThreshold: number; // NUEVO: Para saber cuándo alertar (ej. 48hs)
 }
 
-const Sidebar = ({ sidebarOpen, setSidebarOpen, activeTab, setActiveTab }: SidebarProps) => {
+const Sidebar = ({ sidebarOpen, setSidebarOpen, activeTab, setActiveTab, users, alertThreshold }: SidebarProps) => {
     const [activeUsersCount, setActiveUsersCount] = useState(1);
     
+    // LÓGICA DE ALERTAS: Filtramos usuarios activos/trialing que vencen pronto
+    const expiringCount = users.filter(user => {
+        if (user.subscriptionStatus !== 'active' && user.subscriptionStatus !== 'trialing') return false;
+        
+        const limitDate = user.trialEndsAt || user.currentPeriodEnd;
+        if (!limitDate) return false;
+        
+        const hoursLeft = (new Date(limitDate).getTime() - new Date().getTime()) / (1000 * 60 * 60);
+        return hoursLeft > 0 && hoursLeft <= alertThreshold;
+    }).length;
+
     const menuItems = [
         { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
         { id: 'users', label: 'Usuarios', icon: Users },
@@ -27,7 +40,6 @@ const Sidebar = ({ sidebarOpen, setSidebarOpen, activeTab, setActiveTab }: Sideb
         { id: 'settings', label: 'Configuración', icon: Settings },
     ];
 
-    // PROTOCOLO "LAST SEEN" (Heartbeat)
     useEffect(() => {
         const userEmail = localStorage.getItem('userEmail') || 'admin@gsmfix.com';
         
@@ -67,10 +79,8 @@ const Sidebar = ({ sidebarOpen, setSidebarOpen, activeTab, setActiveTab }: Sideb
         };
     }, []);
 
-    // Función para cambiar de pestaña y cerrar el menú si estamos en celular
     const handleTabClick = (id: string) => {
         setActiveTab(id);
-        // Si la pantalla es chica (mobile), cerramos el sidebar al elegir una opción
         if (window.innerWidth < 768) {
             setSidebarOpen(false);
         }
@@ -78,7 +88,7 @@ const Sidebar = ({ sidebarOpen, setSidebarOpen, activeTab, setActiveTab }: Sideb
 
     return (
         <>
-            {/* FONDO OSCURO PARA MOBILE (Cierra el menú si tocás afuera) */}
+            {/* FONDO OSCURO PARA MOBILE */}
             <div 
                 className={`
                     md:hidden fixed inset-0 bg-black/60 backdrop-blur-sm z-40 transition-opacity duration-300
@@ -91,7 +101,6 @@ const Sidebar = ({ sidebarOpen, setSidebarOpen, activeTab, setActiveTab }: Sideb
             <aside 
                 className={`
                     fixed md:static inset-y-0 left-0 z-50 bg-zinc-950 border-r border-zinc-800 transition-all duration-300 flex flex-col
-                    /* En mobile: si está abierto se muestra, si no se esconde a la izq. En desktop: cambia ancho. */
                     ${sidebarOpen ? 'translate-x-0 w-64' : '-translate-x-full md:translate-x-0 md:w-20'}
                 `}
             >
@@ -108,7 +117,6 @@ const Sidebar = ({ sidebarOpen, setSidebarOpen, activeTab, setActiveTab }: Sideb
                             <p className="text-zinc-500 text-[10px] font-mono mt-1 opacity-70">ADMIN CONSOLE</p>
                         </div>
                     </div>
-                    {/* Botón de cerrar solo visible en mobile */}
                     <button 
                         onClick={() => setSidebarOpen(false)}
                         className="md:hidden text-zinc-500 hover:text-white transition-colors"
@@ -143,6 +151,17 @@ const Sidebar = ({ sidebarOpen, setSidebarOpen, activeTab, setActiveTab }: Sideb
                                 >
                                     {item.label}
                                 </span>
+
+                                {/* NOTIFICACIÓN DE USUARIOS POR VENCER */}
+                                {item.id === 'users' && expiringCount > 0 && (
+                                    <div className={`
+                                        ml-auto bg-rose-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full animate-pulse
+                                        ${!sidebarOpen ? 'absolute top-1 right-1 ml-0 border-2 border-zinc-950' : ''}
+                                    `}>
+                                        {expiringCount}
+                                    </div>
+                                )}
+
                                 {isActive && sidebarOpen && (
                                     <div className="absolute right-2 w-1.5 h-1.5 rounded-full bg-indigo-500 shadow-[0_0_8px_rgba(99,102,241,0.5)]"></div>
                                 )}
