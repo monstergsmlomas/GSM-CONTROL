@@ -1,6 +1,5 @@
 // src/types.ts
 
-// 1. Interfaces Principales
 export interface DashboardUser {
   id: string;
   email: string;
@@ -12,7 +11,7 @@ export interface DashboardUser {
   cicloDePago?: 'mensual' | 'semestral' | 'anual';
   sucursalesExtra?: number;
   currentPeriodEnd?: string | null;
-  telefono?: string; // NUEVO CAMPO
+  telefono?: string;
   updatedAt?: string | null;
   lastSeen?: string | Date | null;
 }
@@ -32,6 +31,3 @@ export interface Partner {
   role: string;
   share: number;
 }
-
-export const MOCK_USERS: DashboardUser[] = [];
-export const MOCK_LOGS: AuditLog[] = [];

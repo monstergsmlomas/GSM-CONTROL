@@ -1,7 +1,7 @@
 import cron from 'node-cron';
 import { getDb } from './db.js';
 import { users, settings, bot_settings } from './schema.js';
-import { eq, sql, and, isNotNull } from 'drizzle-orm';
+import { eq, sql, and, isNotNull, or, lt, ne } from 'drizzle-orm';
 import { sendWhatsAppMessage } from './bot.js';
 
 // Configuración de destinatarios del reporte
@@ -23,7 +23,6 @@ export const startCronJobs = () => {
     });
 };
 
-// AGREGAMOS 'export' para que index.ts pueda usarla en la ruta manual
 export const runWeeklyReport = async () => {
     try {
         const db = getDb();
@@ -37,7 +36,6 @@ export const runWeeklyReport = async () => {
         let mrr = 0;
         active.forEach((user: any) => {
             let baseMensual = 0;
-            // IMPORTANTE: Aseguramos compatibilidad con nombres de la DB
             const sucursales = user.sucursales_extra || user.sucursalesExtra || 0; 
             const ciclo = user.ciclo_de_pago || user.cicloDePago || 'mensual';
             
@@ -77,6 +75,11 @@ export const runWeeklyReport = async () => {
 const runBatchAutomation = async () => {
     try {
         const db = getDb();
+        
+        // A. PRIMERO: Expiramos a los que ya vencieron hoy
+        await autoExpireUsers(db);
+
+        // B. SEGUNDO: Procesamos notificaciones
         const configRes = await db.select().from(bot_settings).limit(1);
         if (configRes.length === 0 || !configRes[0].isEnabled) {
             console.log("🛑 [Cron] Automatización cancelada: Bot desactivado.");
@@ -87,6 +90,33 @@ const runBatchAutomation = async () => {
         await processFinishedTrials(db, config);
     } catch (error: any) {
         console.error("❌ [Cron] Error en ejecución batch:", error.message);
+    }
+};
+
+// --- NUEVA FUNCIÓN: EXPIRA USUARIOS AUTOMÁTICAMENTE ---
+const autoExpireUsers = async (db: any) => {
+    try {
+        // CORRECCIÓN: Usamos el objeto Date real para que Drizzle ORM no tire error
+        const now = new Date();
+        
+        await db.update(users)
+            .set({ 
+                subscriptionStatus: 'expired',
+                updatedAt: new Date()
+            })
+            .where(
+                and(
+                    ne(users.subscriptionStatus, 'expired'),
+                    or(
+                        lt(users.currentPeriodEnd, now),
+                        lt(users.trialEndsAt, now)
+                    )
+                )
+            );
+            
+        console.log("✅ [Cron] Proceso de auto-expiración completado.");
+    } catch (e: any) {
+        console.error("❌ [Cron] Error en autoExpireUsers:", e.message);
     }
 };
 

@@ -33,12 +33,8 @@ app.use((req, res, next) => {
 app.get("/api/admin/force-report", async (req, res) => {
     try {
         console.log("🚀 [Admin] Disparando reporte semanal manualmente...");
-        
-        // Importamos dinámicamente para asegurar que las funciones de cron estén cargadas
         const { runWeeklyReport } = await import('./cron.js');
-        
         await runWeeklyReport();
-        
         res.json({ 
             success: true, 
             message: "Reporte enviado correctamente a Rodrigo y Tomy." 
@@ -157,16 +153,60 @@ app.get("/api/users", async (req, res) => {
 app.patch("/api/users/:id", async (req, res) => {
     try {
         const { id } = req.params;
-        const { subscriptionStatus, trialEndsAt, responsable, ciclo_de_pago, sucursales_extra, currentPeriodEnd, telefono, plan } = req.body;
+        let { subscriptionStatus, trialEndsAt, responsable, ciclo_de_pago, sucursales_extra, currentPeriodEnd, telefono, plan } = req.body;
         const dbUrl = (req.headers['x-db-url'] as string) || process.env.DATABASE_URL;
         const db = getDb(dbUrl);
+
+        const now = new Date();
+        now.setHours(0, 0, 0, 0);
+
+        // --- 🚀 NUEVO: LÓGICA INTELIGENTE DE CAMBIO A PLAN PAGO ---
+        // Si el usuario pasa a un plan pago, lo ponemos "Activo" y NO tiene fecha de suscripción cargada a mano:
+        if (plan !== 'Free' && subscriptionStatus === 'active' && !currentPeriodEnd) {
+            const nuevaFecha = new Date();
+            
+            // Le calculamos el tiempo automáticamente según el ciclo de pago
+            if (ciclo_de_pago === 'anual') {
+                nuevaFecha.setFullYear(nuevaFecha.getFullYear() + 1);
+            } else if (ciclo_de_pago === 'semestral') {
+                nuevaFecha.setMonth(nuevaFecha.getMonth() + 6);
+            } else {
+                nuevaFecha.setMonth(nuevaFecha.getMonth() + 1); // Mensual por defecto
+            }
+            
+            currentPeriodEnd = nuevaFecha.toISOString();
+            trialEndsAt = null; // Limpiamos el trial viejo para que no joda más
+            console.log(`✅ Upgrade detectado para usuario ${id}: Nueva fecha de corte -> ${currentPeriodEnd}`);
+        }
+
+        // --- LÓGICA DE AUTO-EXPIRACIÓN ---
+        let dateToCheck = null;
+        if (plan === 'Free' || subscriptionStatus === 'trialing') {
+            dateToCheck = trialEndsAt;
+        } else {
+            dateToCheck = currentPeriodEnd || trialEndsAt;
+        }
+
+        if (dateToCheck && (subscriptionStatus === 'active' || subscriptionStatus === 'trialing')) {
+            const limitDate = new Date(dateToCheck);
+            limitDate.setHours(0, 0, 0, 0);
+            if (limitDate < now) {
+                console.log(`⚠️ Auto-expirando usuario ${id} por fecha vencida al guardar.`);
+                subscriptionStatus = 'expired';
+            }
+        }
+        // ---------------------------------
+
         const updateData: any = { updatedAt: new Date() };
         
         if (subscriptionStatus) updateData.subscriptionStatus = subscriptionStatus;
-        if (trialEndsAt) updateData.trialEndsAt = new Date(trialEndsAt);
+        
+        // Guardamos las fechas (si trialEndsAt es null, lo va a vaciar en la DB)
+        updateData.trialEndsAt = trialEndsAt ? new Date(trialEndsAt) : null;
+        updateData.currentPeriodEnd = currentPeriodEnd ? new Date(currentPeriodEnd) : null;
+        
         if (ciclo_de_pago) updateData.cicloDePago = ciclo_de_pago;
         if (sucursales_extra !== undefined) updateData.sucursalesExtra = sucursales_extra;
-        if (currentPeriodEnd) updateData.currentPeriodEnd = new Date(currentPeriodEnd);
         if (plan) updateData.plan = plan;
 
         await db.update(users).set(updateData).where(eq(users.id, id));
@@ -176,7 +216,7 @@ app.patch("/api/users/:id", async (req, res) => {
              if (existing) await db.update(settings).set({ phone: telefono }).where(eq(settings.userId, id));
              else await db.insert(settings).values({ userId: id, phone: telefono });
         }
-        res.json({ success: true });
+        res.json({ success: true, newStatus: subscriptionStatus });
     } catch (error: any) {
         res.status(400).json({ error: error.message });
     }
