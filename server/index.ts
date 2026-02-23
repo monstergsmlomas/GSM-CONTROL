@@ -90,20 +90,41 @@ app.get("/api/users/active-count", async (req, res) => {
     try {
         const db = getDb(process.env.DATABASE_URL!);
         const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
-        
         const result = await db.select({ count: sql<number>`count(*)` })
             .from(users)
             .where(gt(users.lastSeen, fiveMinutesAgo));
-            
         res.json({ count: Math.max(Number(result[0].count), 1) });
     } catch (error) { res.json({ count: 1 }); }
 });
 
 app.post("/api/users/ping", async (req, res) => {
-    const { email } = req.body;
-    if (!email) return res.status(400).json({ success: false });
-    pingBuffer.add(email);
-    res.json({ success: true, buffered: true });
+    try {
+        const { email } = req.body;
+        if (!email) return res.status(400).json({ success: false });
+
+        const db = getDb(process.env.DATABASE_URL!);
+        const [existing] = await db.select().from(users).where(eq(users.email, email)).limit(1);
+
+        if (!existing) {
+            console.log(`🆕 [Ping] Registrando nuevo usuario: ${email}`);
+            const trialExpiry = new Date();
+            trialExpiry.setDate(trialExpiry.getDate() + 7);
+
+            await db.insert(users).values({
+                email,
+                subscriptionStatus: 'trialing',
+                plan: 'Free',
+                trialEndsAt: trialExpiry,
+                lastSeen: new Date()
+            });
+        } else {
+            pingBuffer.add(email);
+        }
+        res.json({ success: true });
+    } catch (error: any) {
+        console.error("❌ [Ping Error]:", error.message);
+        res.status(500).json({ error: error.message });
+    }
 });
 
 // --- 4. GESTIÓN DE USUARIOS ---
@@ -154,10 +175,31 @@ app.patch("/api/users/:id", async (req, res) => {
 
         await db.update(users).set(updateData).where(eq(users.id, id));
 
-        if (telefono !== undefined) {
-             const [existing] = await db.select().from(settings).where(eq(settings.userId, id));
-             if (existing) await db.update(settings).set({ phone: telefono }).where(eq(settings.userId, id));
-             else await db.insert(settings).values({ userId: id, phone: telefono });
+        // --- LÓGICA DE BIENVENIDA AL GUARDAR TELÉFONO ---
+        if (telefono !== undefined && telefono !== "") {
+             const [existingSetting] = await db.select().from(settings).where(eq(settings.userId, id));
+             
+             if (!existingSetting) {
+                // Es la primera vez que se configura el teléfono
+                await db.insert(settings).values({ userId: id, phone: telefono });
+                
+                const [config] = await db.select().from(bot_settings).limit(1);
+                const [user] = await db.select().from(users).where(eq(users.id, id)).limit(1);
+                
+                if (config?.isEnabled && config?.welcomeMessage && user) {
+                    const nombre = user.email.split('@')[0];
+                    const msg = config.welcomeMessage
+                        .replace(/{nombre}/g, nombre)
+                        .replace(/{plan}/g, user.plan || 'Estandar')
+                        .replace(/{estado}/g, 'Activo');
+                    
+                    await sendWhatsAppMessage(telefono, msg);
+                    console.log(`✅ [Bienvenida] Enviada a ${nombre} tras configurar su número.`);
+                }
+             } else {
+                // Solo actualización de número existente
+                await db.update(settings).set({ phone: telefono }).where(eq(settings.userId, id));
+             }
         }
         res.json({ success: true });
     } catch (error: any) { res.status(400).json({ error: error.message }); }

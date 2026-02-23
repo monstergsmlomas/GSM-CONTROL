@@ -10,7 +10,7 @@ export const startCronJobs = () => {
     console.log("⏰ [Cron] Automatizaciones listas: Diaria (10:00 AM) | Reporte (Lunes 09:00 AM)");
 
     cron.schedule('0 10 * * *', async () => {
-        console.log("🔍 [Cron] Iniciando revisión diaria de suscripciones...");
+        console.log("🔍 [Cron] Iniciando revisión diaria de suscripciones y avisos...");
         await runBatchAutomation();
     });
 
@@ -32,7 +32,6 @@ export const runWeeklyReport = async () => {
         let mrr = 0;
         active.forEach((user: any) => {
             let baseMensual = 0;
-            // MEJORA: Asegurar que siempre haya un valor numérico para evitar NaN
             const sucursales = Number(user.sucursalesExtra || 0); 
             const ciclo = user.cicloDePago || 'mensual';
             
@@ -80,7 +79,7 @@ const runBatchAutomation = async () => {
         }
         
         const config = configRes[0];
-        await processAlert48h(db, config);
+        await processAlert36h(db, config);
         await processFinishedTrials(db, config);
     } catch (error: any) {
         console.error("❌ [Cron] Error en ejecución batch:", error.message);
@@ -90,8 +89,7 @@ const runBatchAutomation = async () => {
 const autoExpireUsers = async (db: any) => {
     try {
         const now = new Date();
-        
-        const result = await db.update(users)
+        await db.update(users)
             .set({ 
                 subscriptionStatus: 'expired',
                 updatedAt: new Date()
@@ -100,22 +98,11 @@ const autoExpireUsers = async (db: any) => {
                 and(
                     ne(users.subscriptionStatus, 'expired'),
                     or(
-                        // Vencimiento de suscripción paga
-                        and(
-                            ne(users.plan, 'Free'),
-                            isNotNull(users.currentPeriodEnd),
-                            lt(users.currentPeriodEnd, now)
-                        ),
-                        // Vencimiento de Trial
-                        and(
-                            eq(users.plan, 'Free'),
-                            isNotNull(users.trialEndsAt),
-                            lt(users.trialEndsAt, now)
-                        )
+                        and(ne(users.plan, 'Free'), isNotNull(users.currentPeriodEnd), lt(users.currentPeriodEnd, now)),
+                        and(eq(users.plan, 'Free'), isNotNull(users.trialEndsAt), lt(users.trialEndsAt, now))
                     )
                 )
             );
-            
         console.log("✅ [Cron] Chequeo de expiraciones finalizado.");
     } catch (e: any) {
         console.error("❌ [Cron] Error en autoExpireUsers:", e.message);
@@ -123,20 +110,20 @@ const autoExpireUsers = async (db: any) => {
 };
 
 const replaceVariables = (template: string, data: any) => {
+    if (!template) return "";
     return template
-        .replace(/{nombre}/g, data.nombre || "")
-        .replace(/{plan}/g, data.plan || "")
-        .replace(/{estado}/g, data.estado || "");
+        .replace(/{nombre}/g, data.nombre || "Cliente")
+        .replace(/{plan}/g, data.plan || "Estandar")
+        .replace(/{estado}/g, data.estado || "Activo");
 };
 
-const processAlert48h = async (db: any, config: any) => {
+const processAlert36h = async (db: any, config: any) => {
     try {
-        const today = new Date();
-        const after48h = new Date();
-        after48h.setDate(today.getDate() + 2);
+        const after36h = new Date(Date.now() + (36 * 60 * 60 * 1000));
+        const after48h = new Date(Date.now() + (48 * 60 * 60 * 1000));
         
-        // Formato YYYY-MM-DD para la comparación SQL
-        const dateStr = after48h.toISOString().split('T')[0];
+        const startStr = after36h.toISOString().split('T')[0];
+        const endStr = after48h.toISOString().split('T')[0];
 
         const usersToNotify = await db.select({
             id: users.id,
@@ -145,22 +132,23 @@ const processAlert48h = async (db: any, config: any) => {
             phone: settings.phone
         })
         .from(users)
-        .innerJoin(settings, eq(users.id, sql`${settings.userId}::uuid`)) // Corrección de tipos
+        .innerJoin(settings, eq(users.id, sql`${settings.userId}::uuid`))
         .where(and(
-            sql`DATE(${users.currentPeriodEnd}) = ${dateStr}`,
+            sql`DATE(${users.currentPeriodEnd}) >= ${startStr}`,
+            sql`DATE(${users.currentPeriodEnd}) <= ${endStr}`,
             isNotNull(settings.phone),
             ne(users.subscriptionStatus, 'expired')
         ));
 
         for (const user of usersToNotify) {
             const nombre = user.email.split('@')[0];
-            const message = replaceVariables(config.reminderMessage || "Hola {nombre}, tu plan {plan} vence en 48hs.", {
-                nombre, plan: user.plan, estado: "Activo"
+            const message = replaceVariables(config.reminderMessage, {
+                nombre, plan: user.plan, estado: "Próximo a vencer"
             });
             await sendWhatsAppMessage(user.phone, message);
         }
     } catch (e: any) {
-        console.error("❌ [Cron] Error en alertas 48h:", e.message);
+        console.error("❌ [Cron] Error en alertas 36h:", e.message);
     }
 };
 
@@ -184,8 +172,8 @@ const processFinishedTrials = async (db: any, config: any) => {
 
         for (const user of usersToNotify) {
             const nombre = user.email.split('@')[0];
-            const message = replaceVariables(config.trialEndedMessage || "Hola {nombre}, tu periodo de prueba ha finalizado.", {
-                nombre, plan: "Prueba", estado: "Expirado"
+            const message = replaceVariables(config.trialEndedMessage, {
+                nombre, plan: "Trial", estado: "Finalizado"
             });
             await sendWhatsAppMessage(user.phone, message);
         }
