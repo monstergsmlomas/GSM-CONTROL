@@ -8,7 +8,7 @@ let clientSocket: any = null;
 let isReady = false;
 let currentStatus = 'disconnected'; 
 let currentQR: string | null = null;
-let qrLink: string | null = null; // Nuevo: Enlace directo al QR
+let qrLink: string | null = null;
 
 export const getBotStatus = () => {
     return { status: currentStatus, qr: currentQR, qrLink, isReady };
@@ -26,6 +26,8 @@ const useDatabaseAuthState = async () => {
                     target: wa_sessions.id,
                     set: { data: str }
                 });
+            // Log para confirmar que la DB está respondiendo
+            console.log(`💾 [WhatsApp DB] Dato guardado: ${id}`);
         } catch (error) {
             console.error("❌ [WhatsApp DB] Error escribiendo:", id);
         }
@@ -94,7 +96,7 @@ const useDatabaseAuthState = async () => {
 };
 
 export const initWhatsApp = async () => {
-    console.log(`🚀 [WhatsApp] Iniciando motor de sesión persistente...`);
+    console.log(`🚀 [WhatsApp] Iniciando motor con persistencia en DB...`);
     currentStatus = 'connecting';
     
     const { state, saveCreds } = await useDatabaseAuthState();
@@ -108,13 +110,18 @@ export const initWhatsApp = async () => {
         const sock = makeWASocket({
             auth: state,
             printQRInTerminal: false,
-            browser: Browsers.macOS('Desktop'),
+            // MEJORA: Nombre del navegador personalizado para identificar la sesión en el celu
+            browser: Browsers.macOS('GSM-Control'), 
             syncFullHistory: false,
             connectTimeoutMs: 60000,
         });
 
         clientSocket = sock;
-        sock.ev.on('creds.update', saveCreds);
+
+        // GUARDADO FORZADO: Guardar credenciales ante cualquier cambio
+        sock.ev.on('creds.update', async () => {
+            await saveCreds();
+        });
 
         sock.ev.on('connection.update', async (update) => {
             const { connection, lastDisconnect, qr } = update;
@@ -122,9 +129,8 @@ export const initWhatsApp = async () => {
             if (qr) {
                 currentStatus = 'qr';
                 currentQR = qr;
-                // Generamos el link automáticamente para el Dashboard
                 qrLink = `https://api.qrserver.com/v1/create-qr-code/?size=400x400&data=${encodeURIComponent(qr)}`;
-                console.log('✨ [WhatsApp] QR generado. Si no lo ves en el Dashboard, usa el link de la consola.');
+                console.log('✨ [WhatsApp] QR generado.');
                 qrcode.generate(qr, { small: true });
             }
             
@@ -142,6 +148,7 @@ export const initWhatsApp = async () => {
                     setTimeout(() => connectToWhatsApp(), 5000);
                 } else {
                     currentStatus = 'disconnected';
+                    console.log('🛑 [WhatsApp] Sesión cerrada. Limpiando DB...');
                     const db = getDb(process.env.DATABASE_URL!);
                     await db.delete(wa_sessions);
                 }
@@ -150,7 +157,9 @@ export const initWhatsApp = async () => {
                 currentQR = null;
                 qrLink = null;
                 isReady = true;
-                console.log('✅ [WhatsApp] Sesión recuperada y conectada correctamente.');
+                // FORZAR GUARDADO AL ABRIR: Asegura que los datos finales de conexión queden en Supabase
+                await saveCreds();
+                console.log('✅ [WhatsApp] ¡SESIÓN GUARDADA EN DB Y CONECTADA!');
             }
         });
     };
