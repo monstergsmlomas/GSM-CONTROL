@@ -70,8 +70,10 @@ export const runWeeklyReport = async () => {
 const runBatchAutomation = async () => {
     try {
         const db = getDb();
+        // 1. Expira los que vencieron hoy
         await autoExpireUsers(db);
 
+        // 2. Carga configuración del bot
         const configRes = await db.select().from(bot_settings).limit(1);
         if (configRes.length === 0 || !configRes[0].isEnabled) {
             console.log("🛑 [Cron] Automatización omitida: Bot desactivado.");
@@ -79,8 +81,11 @@ const runBatchAutomation = async () => {
         }
         
         const config = configRes[0];
+        // 3. Procesar alertas preventivas (36hs antes)
         await processAlert36h(db, config);
-        await processFinishedTrials(db, config);
+        // 4. Procesar avisos de expiración (Trial y Licencia)
+        await processExpirations(db, config);
+        
     } catch (error: any) {
         console.error("❌ [Cron] Error en ejecución batch:", error.message);
     }
@@ -117,13 +122,11 @@ const replaceVariables = (template: string, data: any) => {
         .replace(/{estado}/g, data.estado || "Activo");
 };
 
+// --- ALERTA PREVENTIVA (36 a 48 hs antes de vencer) ---
 const processAlert36h = async (db: any, config: any) => {
     try {
-        const after36h = new Date(Date.now() + (36 * 60 * 60 * 1000));
-        const after48h = new Date(Date.now() + (48 * 60 * 60 * 1000));
-        
-        const startStr = after36h.toISOString().split('T')[0];
-        const endStr = after48h.toISOString().split('T')[0];
+        const targetDate = new Date(Date.now() + (40 * 60 * 60 * 1000)); // Punto medio ~40hs
+        const dateStr = targetDate.toISOString().split('T')[0];
 
         const usersToNotify = await db.select({
             id: users.id,
@@ -134,10 +137,12 @@ const processAlert36h = async (db: any, config: any) => {
         .from(users)
         .innerJoin(settings, eq(users.id, sql`${settings.userId}::uuid`))
         .where(and(
-            sql`DATE(${users.currentPeriodEnd}) >= ${startStr}`,
-            sql`DATE(${users.currentPeriodEnd}) <= ${endStr}`,
             isNotNull(settings.phone),
-            ne(users.subscriptionStatus, 'expired')
+            ne(users.subscriptionStatus, 'expired'),
+            or(
+                sql`DATE(${users.currentPeriodEnd}) = ${dateStr}`, // Alerta Plan Pago
+                sql`DATE(${users.trialEndsAt}) = ${dateStr}`      // Alerta Trial
+            )
         ));
 
         for (const user of usersToNotify) {
@@ -152,7 +157,8 @@ const processAlert36h = async (db: any, config: any) => {
     }
 };
 
-const processFinishedTrials = async (db: any, config: any) => {
+// --- AVISO DE EXPIRACIÓN (Licencia vencida hoy o ayer) ---
+const processExpirations = async (db: any, config: any) => {
     try {
         const yesterday = new Date();
         yesterday.setDate(yesterday.getDate() - 1);
@@ -161,23 +167,29 @@ const processFinishedTrials = async (db: any, config: any) => {
         const usersToNotify = await db.select({
             id: users.id,
             email: users.email,
+            plan: users.plan,
             phone: settings.phone
         })
         .from(users)
         .innerJoin(settings, eq(users.id, sql`${settings.userId}::uuid`))
         .where(and(
-            sql`DATE(${users.trialEndsAt}) = ${dateStr}`,
-            isNotNull(settings.phone)
+            isNotNull(settings.phone),
+            or(
+                sql`DATE(${users.currentPeriodEnd}) = ${dateStr}`, // Pago vencido ayer
+                sql`DATE(${users.trialEndsAt}) = ${dateStr}`      // Trial vencido ayer
+            )
         ));
 
         for (const user of usersToNotify) {
             const nombre = user.email.split('@')[0];
             const message = replaceVariables(config.trialEndedMessage, {
-                nombre, plan: "Trial", estado: "Finalizado"
+                nombre, 
+                plan: user.plan === 'Free' ? 'Prueba' : user.plan, 
+                estado: "Vencido"
             });
             await sendWhatsAppMessage(user.phone, message);
         }
     } catch (e: any) {
-        console.error("❌ [Cron] Error en alertas Trial:", e.message);
+        console.error("❌ [Cron] Error en avisos de expiración:", e.message);
     }
 };

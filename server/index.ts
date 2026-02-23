@@ -34,14 +34,12 @@ setInterval(async () => {
 
     try {
         const db = getDb(process.env.DATABASE_URL!);
-        console.log(`[Ping System] Actualizando lastSeen para ${emailsToUpdate.length} usuarios...`);
-        
         await db.update(users)
             .set({ lastSeen: new Date() })
             .where(inArray(users.email, emailsToUpdate));
             
     } catch (error: any) {
-        console.error("❌ [Ping System] Error en actualización masiva:", error.message);
+        console.error("❌ [Ping System] Error:", error.message);
     }
 }, 60000);
 
@@ -163,6 +161,8 @@ app.patch("/api/users/:id", async (req, res) => {
         let { subscriptionStatus, trialEndsAt, currentPeriodEnd, telefono, plan, ciclo_de_pago, sucursales_extra } = req.body;
         const db = getDb(process.env.DATABASE_URL!);
 
+        console.log(`🛠️ [PATCH] Actualizando usuario ${id}...`);
+
         if (plan && plan !== 'Free') trialEndsAt = null;
 
         const updateData: any = { updatedAt: new Date() };
@@ -178,62 +178,3 @@ app.patch("/api/users/:id", async (req, res) => {
         // --- LÓGICA DE BIENVENIDA AL GUARDAR TELÉFONO ---
         if (telefono !== undefined && telefono !== "") {
              const [existingSetting] = await db.select().from(settings).where(eq(settings.userId, id));
-             
-             if (!existingSetting) {
-                console.log(`✨ [Welcome] Primer teléfono detectado para ID ${id}. Enviando mensaje...`);
-                await db.insert(settings).values({ userId: id, phone: telefono });
-                
-                const [config] = await db.select().from(bot_settings).limit(1);
-                const [user] = await db.select().from(users).where(eq(users.id, id)).limit(1);
-                
-                if (config?.isEnabled && config?.welcomeMessage && user) {
-                    const nombre = user.email.split('@')[0];
-                    const msg = config.welcomeMessage
-                        .replace(/{nombre}/g, nombre)
-                        .replace(/{plan}/g, user.plan || 'Estandar')
-                        .replace(/{estado}/g, 'Activo');
-                    
-                    const sent = await sendWhatsAppMessage(telefono, msg);
-                    if (sent) console.log(`✅ [Bienvenida] Enviada a ${nombre}`);
-                    else console.log(`❌ [Bienvenida] Falló el envío. ¿Bot conectado?`);
-                }
-             } else {
-                await db.update(settings).set({ phone: telefono }).where(eq(settings.userId, id));
-             }
-        }
-        res.json({ success: true });
-    } catch (error: any) { res.status(400).json({ error: error.message }); }
-});
-
-// --- 5. LOGS Y MÉTRICAS ---
-app.get("/api/logs", async (req, res) => {
-    try {
-        const db = getDb(process.env.DATABASE_URL!);
-        const logs = await db.select().from(audit_logs).orderBy(desc(audit_logs.fecha)).limit(100);
-        res.json(logs);
-    } catch (error) { res.json([]); }
-});
-
-app.get("/api/metrics", async (req, res) => {
-    try {
-        const db = getDb(process.env.DATABASE_URL!);
-        const all = await db.select().from(users);
-        res.json({
-            total: all.length,
-            active: all.filter((u: any) => u.subscriptionStatus === 'active').length,
-            trialing: all.filter((u: any) => u.subscriptionStatus === 'trialing').length
-        });
-    } catch (error) { res.json({ total: 0, active: 0, trialing: 0 }); }
-});
-
-app.use(express.static(path.join(process.cwd(), 'dist')));
-app.get(/^(?!\/api).*/, (req, res) => {
-    res.sendFile(path.join(process.cwd(), 'dist', 'index.html'));
-});
-
-const PORT = Number(process.env.PORT) || 5000;
-app.listen(PORT, '0.0.0.0', async () => {
-    console.log(`✅ Servidor GSM-CONTROL en puerto ${PORT}`);
-    initWhatsApp();
-    startCronJobs();
-});
