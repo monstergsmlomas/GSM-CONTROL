@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'react';
 import {
     Users,
     DollarSign,
@@ -7,7 +8,8 @@ import {
     Clock,
     TrendingUp,
     Activity,
-    PieChart as PieChartIcon
+    PieChart as PieChartIcon,
+    RefreshCw
 } from 'lucide-react';
 import {
     BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -23,6 +25,56 @@ interface DashboardProps {
 }
 
 export default function Dashboard({ users, logs, isLoading, setCurrentView }: DashboardProps) {
+    // NUEVO ESTADO PARA MONITOREAR EL BOT EN TIEMPO REAL
+    const [botState, setBotState] = useState({ status: 'loading', isReady: false });
+
+    // Consulta el estado del bot cada 5 segundos
+    useEffect(() => {
+        const fetchBotStatus = async () => {
+            try {
+                const res = await fetch('/api/bot-status');
+                if (res.ok) {
+                    const data = await res.json();
+                    setBotState(data);
+                }
+            } catch (e) {
+                setBotState({ status: 'disconnected', isReady: false });
+            }
+        };
+        fetchBotStatus(); // Carga inicial
+        const interval = setInterval(fetchBotStatus, 5000); // Polling cada 5s
+        return () => clearInterval(interval);
+    }, []);
+
+    // Función que pinta el widget según el estado real del bot
+    const getBotUI = () => {
+        switch(botState.status) {
+            case 'connected':
+                return {
+                    border: 'hover:border-emerald-500/50', bg: 'bg-emerald-500/10', text: 'text-emerald-500', borderIcon: 'border-emerald-500/20',
+                    title: 'ONLINE', sub: 'Sincronización Activa', pulse: 'animate-pulse text-emerald-500', icon: <Activity size={20} />
+                };
+            case 'qr':
+                return {
+                    border: 'hover:border-amber-500/50 border-amber-500/30', bg: 'bg-amber-500/10', text: 'text-amber-500', borderIcon: 'border-amber-500/20',
+                    title: 'ESPERANDO QR', sub: 'Falta vinculación', pulse: 'animate-pulse text-amber-500', icon: <AlertTriangle size={20} />
+                };
+            case 'connecting':
+                return {
+                    border: 'hover:border-blue-500/50 border-blue-500/30', bg: 'bg-blue-500/10', text: 'text-blue-500', borderIcon: 'border-blue-500/20',
+                    title: 'CONECTANDO', sub: 'Negociando conexión...', pulse: 'text-blue-500', icon: <RefreshCw size={20} className="animate-spin" />
+                };
+            case 'disconnected':
+            default:
+                return {
+                    border: 'hover:border-rose-500/50 border-rose-500/30', bg: 'bg-rose-500/10', text: 'text-rose-500', borderIcon: 'border-rose-500/20',
+                    title: 'OFFLINE', sub: 'Conexión Perdida', pulse: 'text-rose-500', icon: <AlertTriangle size={20} />
+                };
+        }
+    };
+
+    const botUI = getBotUI();
+
     if (isLoading) {
         return (
             <div className="flex items-center justify-center h-full text-zinc-500 animate-pulse font-mono">
@@ -112,16 +164,21 @@ export default function Dashboard({ users, logs, isLoading, setCurrentView }: Da
                    </div>
                 </button>
 
-                <div className="bg-zinc-900 p-6 rounded-2xl border border-zinc-800 relative overflow-hidden group hover:border-amber-500/50 transition-all shadow-lg">
+                {/* WIDGET DEL BOT (Ahora es dinámico) */}
+                <div className={`bg-zinc-900 p-6 rounded-2xl border border-zinc-800 relative overflow-hidden group transition-all shadow-lg ${botUI.border}`}>
                    <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity"><AlertTriangle size={60} /></div>
                    <div className="flex justify-between items-start">
                        <div>
                            <p className="text-zinc-500 text-[10px] font-black uppercase tracking-widest">Estado del Bot</p>
-                           <h3 className="text-3xl font-black text-white mt-2">100%</h3>
+                           <h3 className={`text-2xl font-black mt-2 ${botUI.text}`}>{botUI.title}</h3>
                        </div>
-                       <div className="bg-amber-500/10 p-2 rounded-xl text-amber-500 border border-amber-500/20"><Activity size={20} /></div>
+                       <div className={`${botUI.bg} p-2 rounded-xl ${botUI.text} border ${botUI.borderIcon}`}>
+                           {botUI.icon}
+                       </div>
                    </div>
-                   <p className="mt-4 text-[10px] text-emerald-500 font-bold uppercase tracking-widest animate-pulse">Sincronización Activa</p>
+                   <p className={`mt-4 text-[10px] font-bold uppercase tracking-widest ${botUI.pulse}`}>
+                       {botUI.sub}
+                   </p>
                 </div>
             </div>
 

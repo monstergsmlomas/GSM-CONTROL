@@ -11,7 +11,7 @@ export const users = pgTable("users", {
   isAutoRenew: boolean("is_auto_renew").default(true),
   cicloDePago: text("ciclo_de_pago").default("mensual"), // mensual, semestral, anual
   sucursalesExtra: integer("sucursales_extra").default(0),
-  telefono: text("telefono"), // <--- Línea agregada para sincronizar con la DB real
+  telefono: text("telefono"), 
   lastSeen: timestamp("last_seen").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
@@ -38,6 +38,12 @@ export const audit_logs = pgTable("audit_logs", {
   responsable: text("responsable").notNull().default("Sistema"),
   monto: integer("monto").default(0),
   fecha: timestamp("fecha").defaultNow(),
+});
+
+// --- NUEVA TABLA: SESIONES DE WHATSAPP ---
+export const wa_sessions = pgTable("wa_sessions", {
+  id: text("id").primaryKey(),
+  data: text("data").notNull(),
 });
 
 export type User = typeof users.$inferSelect;

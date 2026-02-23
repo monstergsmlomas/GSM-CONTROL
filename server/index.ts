@@ -11,7 +11,8 @@ import cors from "cors";
 import { getDb } from "./db.js";
 import { users, audit_logs, settings, bot_settings } from "./schema.js";
 import { eq, desc, sql } from "drizzle-orm";
-import { initWhatsApp, sendWhatsAppMessage } from "./bot.js";
+// 1. CORRECCIÓN: Agregamos getBotStatus a la importación
+import { initWhatsApp, sendWhatsAppMessage, getBotStatus } from "./bot.js";
 import { startCronJobs } from "./cron.js";
 
 const app = express();
@@ -106,6 +107,53 @@ app.get("/api/metrics", async (req, res) => {
     }
 });
 
+// --- NUEVAS RUTAS: CONFIGURACIÓN Y ESTADO DEL BOT ---
+
+// GET /api/bot-settings
+app.get("/api/bot-settings", async (req, res) => {
+    try {
+        const dbUrl = (req.headers['x-db-url'] as string) || process.env.DATABASE_URL;
+        if (!dbUrl) throw new Error("DATABASE_URL not configured");
+        const db = getDb(dbUrl);
+        const config = await db.select().from(bot_settings).limit(1);
+        if (config.length > 0) {
+            res.json(config[0]);
+        } else {
+            res.json({ isEnabled: false, welcomeMessage: "", reminderMessage: "", trialEndedMessage: "" });
+        }
+    } catch (error: any) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// POST /api/bot-settings
+app.post("/api/bot-settings", async (req, res) => {
+    try {
+        const dbUrl = (req.headers['x-db-url'] as string) || process.env.DATABASE_URL;
+        if (!dbUrl) throw new Error("DATABASE_URL not configured");
+        const db = getDb(dbUrl);
+        const body = req.body;
+        
+        const existing = await db.select().from(bot_settings).limit(1);
+        if (existing.length > 0) {
+            await db.update(bot_settings).set(body).where(eq(bot_settings.id, existing[0].id));
+        } else {
+            await db.insert(bot_settings).values(body);
+        }
+        res.json({ success: true });
+    } catch (error: any) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// 2. CORRECCIÓN: Nueva ruta para que el Dashboard lea el estado del bot
+// GET /api/bot-status
+app.get("/api/bot-status", (req, res) => {
+    res.json(getBotStatus());
+});
+
+// -------------------------------------------
+
 // GET /api/users
 app.get("/api/users", async (req, res) => {
     try {
@@ -160,22 +208,23 @@ app.patch("/api/users/:id", async (req, res) => {
         const now = new Date();
         now.setHours(0, 0, 0, 0);
 
-        // --- 🚀 NUEVO: LÓGICA INTELIGENTE DE CAMBIO A PLAN PAGO ---
-        // Si el usuario pasa a un plan pago, lo ponemos "Activo" y NO tiene fecha de suscripción cargada a mano:
+        // --- 🧹 LIMPIEZA OBLIGATORIA DEL FANTASMA ---
+        // Si el plan no es Free, aniquilamos la fecha de Trial para que no interfiera jamás
+        if (plan && plan !== 'Free') {
+            trialEndsAt = null;
+        }
+
+        // --- 🚀 LÓGICA INTELIGENTE DE CAMBIO A PLAN PAGO ---
         if (plan !== 'Free' && subscriptionStatus === 'active' && !currentPeriodEnd) {
             const nuevaFecha = new Date();
-            
-            // Le calculamos el tiempo automáticamente según el ciclo de pago
             if (ciclo_de_pago === 'anual') {
                 nuevaFecha.setFullYear(nuevaFecha.getFullYear() + 1);
             } else if (ciclo_de_pago === 'semestral') {
                 nuevaFecha.setMonth(nuevaFecha.getMonth() + 6);
             } else {
-                nuevaFecha.setMonth(nuevaFecha.getMonth() + 1); // Mensual por defecto
+                nuevaFecha.setMonth(nuevaFecha.getMonth() + 1); 
             }
-            
             currentPeriodEnd = nuevaFecha.toISOString();
-            trialEndsAt = null; // Limpiamos el trial viejo para que no joda más
             console.log(`✅ Upgrade detectado para usuario ${id}: Nueva fecha de corte -> ${currentPeriodEnd}`);
         }
 
@@ -184,7 +233,7 @@ app.patch("/api/users/:id", async (req, res) => {
         if (plan === 'Free' || subscriptionStatus === 'trialing') {
             dateToCheck = trialEndsAt;
         } else {
-            dateToCheck = currentPeriodEnd || trialEndsAt;
+            dateToCheck = currentPeriodEnd; // Exclusivamente mira la suscripción
         }
 
         if (dateToCheck && (subscriptionStatus === 'active' || subscriptionStatus === 'trialing')) {
@@ -201,7 +250,7 @@ app.patch("/api/users/:id", async (req, res) => {
         
         if (subscriptionStatus) updateData.subscriptionStatus = subscriptionStatus;
         
-        // Guardamos las fechas (si trialEndsAt es null, lo va a vaciar en la DB)
+        // Guardamos las fechas. Si trialEndsAt es null, lo borra en la base de datos.
         updateData.trialEndsAt = trialEndsAt ? new Date(trialEndsAt) : null;
         updateData.currentPeriodEnd = currentPeriodEnd ? new Date(currentPeriodEnd) : null;
         

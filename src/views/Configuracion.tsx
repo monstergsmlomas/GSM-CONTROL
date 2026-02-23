@@ -49,10 +49,11 @@ export default function Configuracion({ onSave, initialPartners, initialMrrTarge
                 }
                 const data = await res.json();
                 if (data && !data.error) {
-                    setBotEnabled(data.is_enabled);
-                    setTemplateWelcome(data.welcome_message || "");
-                    setTemplateReminder48h(data.reminder_message || "");
-                    setTemplateTrialEnded(data.trial_ended_message || "");
+                    // CORRECCIÓN: Ahora lee correctamente los nombres tal cual están en la base de datos
+                    setBotEnabled(data.isEnabled ?? data.is_enabled ?? false);
+                    setTemplateWelcome(data.welcomeMessage ?? data.welcome_message ?? "");
+                    setTemplateReminder48h(data.reminderMessage ?? data.reminder_message ?? "");
+                    setTemplateTrialEnded(data.trialEndedMessage ?? data.trial_ended_message ?? "");
                 }
             } catch (error) {
                 console.error("Error fetching bot settings:", error);
@@ -123,14 +124,14 @@ export default function Configuracion({ onSave, initialPartners, initialMrrTarge
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    is_enabled: botEnabled,
-                    welcome_message: templateWelcome,
-                    reminder_message: templateReminder48h,
-                    trial_ended_message: templateTrialEnded
+                    // CORRECCIÓN: Enviamos los nombres correctos a la base de datos
+                    isEnabled: botEnabled,
+                    welcomeMessage: templateWelcome,
+                    reminderMessage: templateReminder48h,
+                    trialEndedMessage: templateTrialEnded
                 })
             });
 
-            // EL DETALLE CLAVE: Validar que el servidor responda OK (200)
             if (!res.ok) {
                 const errData = await res.json().catch(() => ({}));
                 throw new Error(errData.error || `Error del servidor (${res.status})`);
@@ -140,7 +141,7 @@ export default function Configuracion({ onSave, initialPartners, initialMrrTarge
             setTimeout(() => setSuccess(false), 3000);
         } catch (error: any) {
             console.error("Error al guardar ajustes:", error);
-            alert(`⚠️ No se guardaron los ajustes del bot:\n\n${error.message}\n\nSi el error es que la tabla no existe, necesitas correr 'npx drizzle-kit push' en tu terminal.`);
+            alert(`⚠️ No se guardaron los ajustes del bot:\n\n${error.message}`);
         } finally {
             setLoading(false);
         }

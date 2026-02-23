@@ -93,10 +93,9 @@ const runBatchAutomation = async () => {
     }
 };
 
-// --- NUEVA FUNCIÓN: EXPIRA USUARIOS AUTOMÁTICAMENTE ---
+// --- FUNCIÓN CORREGIDA: EXPIRA USUARIOS AUTOMÁTICAMENTE ---
 const autoExpireUsers = async (db: any) => {
     try {
-        // CORRECCIÓN: Usamos el objeto Date real para que Drizzle ORM no tire error
         const now = new Date();
         
         await db.update(users)
@@ -108,8 +107,18 @@ const autoExpireUsers = async (db: any) => {
                 and(
                     ne(users.subscriptionStatus, 'expired'),
                     or(
-                        lt(users.currentPeriodEnd, now),
-                        lt(users.trialEndsAt, now)
+                        // 1. Si es un plan PAGO, expira SOLO si la fecha de SUSCRIPCIÓN ya pasó
+                        and(
+                            ne(users.plan, 'Free'),
+                            isNotNull(users.currentPeriodEnd),
+                            lt(users.currentPeriodEnd, now)
+                        ),
+                        // 2. Si es plan FREE, expira SOLO si la fecha del TRIAL ya pasó
+                        and(
+                            eq(users.plan, 'Free'),
+                            isNotNull(users.trialEndsAt),
+                            lt(users.trialEndsAt, now)
+                        )
                     )
                 )
             );
