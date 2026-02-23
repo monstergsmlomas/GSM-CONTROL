@@ -180,7 +180,7 @@ app.patch("/api/users/:id", async (req, res) => {
              const [existingSetting] = await db.select().from(settings).where(eq(settings.userId, id));
              
              if (!existingSetting) {
-                // Es la primera vez que se configura el teléfono
+                console.log(`✨ [Welcome] Primer teléfono detectado para ID ${id}. Enviando mensaje...`);
                 await db.insert(settings).values({ userId: id, phone: telefono });
                 
                 const [config] = await db.select().from(bot_settings).limit(1);
@@ -193,11 +193,11 @@ app.patch("/api/users/:id", async (req, res) => {
                         .replace(/{plan}/g, user.plan || 'Estandar')
                         .replace(/{estado}/g, 'Activo');
                     
-                    await sendWhatsAppMessage(telefono, msg);
-                    console.log(`✅ [Bienvenida] Enviada a ${nombre} tras configurar su número.`);
+                    const sent = await sendWhatsAppMessage(telefono, msg);
+                    if (sent) console.log(`✅ [Bienvenida] Enviada a ${nombre}`);
+                    else console.log(`❌ [Bienvenida] Falló el envío. ¿Bot conectado?`);
                 }
              } else {
-                // Solo actualización de número existente
                 await db.update(settings).set({ phone: telefono }).where(eq(settings.userId, id));
              }
         }

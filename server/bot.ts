@@ -26,7 +26,6 @@ const useDatabaseAuthState = async () => {
                     target: wa_sessions.id,
                     set: { data: str }
                 });
-            // Log para confirmar que la DB está respondiendo
             console.log(`💾 [WhatsApp DB] Dato guardado: ${id}`);
         } catch (error) {
             console.error("❌ [WhatsApp DB] Error escribiendo:", id);
@@ -59,16 +58,11 @@ const useDatabaseAuthState = async () => {
                 get: async (type: string, ids: string[]) => {
                     const data: { [_: string]: any } = {};
                     const keys = ids.map(id => `${type}-${id}`);
-                    
                     try {
-                        const results = await db.select()
-                            .from(wa_sessions)
-                            .where(inArray(wa_sessions.id, keys));
-
+                        const results = await db.select().from(wa_sessions).where(inArray(wa_sessions.id, keys));
                         for (const row of results) {
                             const originalId = row.id.replace(`${type}-`, '');
                             let value = JSON.parse(row.data, BufferJSON.reviver);
-                            
                             if (type === 'app-state-sync-key' && value) {
                                 value = proto.Message.AppStateSyncKeyData.fromObject(value);
                             }
@@ -110,18 +104,13 @@ export const initWhatsApp = async () => {
         const sock = makeWASocket({
             auth: state,
             printQRInTerminal: false,
-            // MEJORA: Nombre del navegador personalizado para identificar la sesión en el celu
             browser: Browsers.macOS('GSM-Control'), 
             syncFullHistory: false,
             connectTimeoutMs: 60000,
         });
 
         clientSocket = sock;
-
-        // GUARDADO FORZADO: Guardar credenciales ante cualquier cambio
-        sock.ev.on('creds.update', async () => {
-            await saveCreds();
-        });
+        sock.ev.on('creds.update', saveCreds);
 
         sock.ev.on('connection.update', async (update) => {
             const { connection, lastDisconnect, qr } = update;
@@ -130,25 +119,17 @@ export const initWhatsApp = async () => {
                 currentStatus = 'qr';
                 currentQR = qr;
                 qrLink = `https://api.qrserver.com/v1/create-qr-code/?size=400x400&data=${encodeURIComponent(qr)}`;
-                console.log('✨ [WhatsApp] QR generado.');
                 qrcode.generate(qr, { small: true });
             }
             
-            if (connection === 'connecting') currentStatus = 'connecting';
-
             if (connection === 'close') {
-                currentQR = null;
-                qrLink = null;
                 isReady = false;
                 const statusCode = (lastDisconnect?.error as any)?.output?.statusCode;
-                const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
-                
-                if (shouldReconnect) {
+                if (statusCode !== DisconnectReason.loggedOut) {
                     currentStatus = 'connecting';
                     setTimeout(() => connectToWhatsApp(), 5000);
                 } else {
                     currentStatus = 'disconnected';
-                    console.log('🛑 [WhatsApp] Sesión cerrada. Limpiando DB...');
                     const db = getDb(process.env.DATABASE_URL!);
                     await db.delete(wa_sessions);
                 }
@@ -157,8 +138,7 @@ export const initWhatsApp = async () => {
                 currentQR = null;
                 qrLink = null;
                 isReady = true;
-                // FORZAR GUARDADO AL ABRIR: Asegura que los datos finales de conexión queden en Supabase
-                await saveCreds();
+                await saveCreds(); // Forzado al conectar
                 console.log('✅ [WhatsApp] ¡SESIÓN GUARDADA EN DB Y CONECTADA!');
             }
         });
