@@ -8,15 +8,15 @@ let clientSocket: any = null;
 let isReady = false;
 let currentStatus = 'disconnected'; 
 let currentQR: string | null = null;
+let qrLink: string | null = null; // Nuevo: Enlace directo al QR
 
 export const getBotStatus = () => {
-    return { status: currentStatus, qr: currentQR, isReady };
+    return { status: currentStatus, qr: currentQR, qrLink, isReady };
 };
 
 const useDatabaseAuthState = async () => {
     const db = getDb(process.env.DATABASE_URL!);
 
-    // Helper para escribir con reintentos básicos
     const writeData = async (data: any, id: string) => {
         const str = JSON.stringify(data, BufferJSON.replacer);
         try {
@@ -27,7 +27,7 @@ const useDatabaseAuthState = async () => {
                     set: { data: str }
                 });
         } catch (error) {
-            console.error("❌ [WhatsApp DB] Error escribiendo clave:", id);
+            console.error("❌ [WhatsApp DB] Error escribiendo:", id);
         }
     };
 
@@ -38,9 +38,8 @@ const useDatabaseAuthState = async () => {
                 return JSON.parse(existing[0].data, BufferJSON.reviver);
             }
         } catch (error) {
-            console.error("❌ [WhatsApp DB] Error leyendo clave:", id);
+            return null;
         }
-        return null;
     };
 
     const removeData = async (id: string) => {
@@ -57,16 +56,14 @@ const useDatabaseAuthState = async () => {
             keys: {
                 get: async (type: string, ids: string[]) => {
                     const data: { [_: string]: any } = {};
+                    const keys = ids.map(id => `${type}-${id}`);
                     
-                    // MEJORA: Consulta por lotes (Batch) en lugar de uno por uno
                     try {
-                        const keys = ids.map(id => `${type}-${id}`);
                         const results = await db.select()
                             .from(wa_sessions)
                             .where(inArray(wa_sessions.id, keys));
 
                         for (const row of results) {
-                            // Extraemos el ID original (sin el prefijo del tipo)
                             const originalId = row.id.replace(`${type}-`, '');
                             let value = JSON.parse(row.data, BufferJSON.reviver);
                             
@@ -75,9 +72,7 @@ const useDatabaseAuthState = async () => {
                             }
                             data[originalId] = value;
                         }
-                    } catch (error) {
-                        console.error("❌ [WhatsApp DB] Error en lectura masiva");
-                    }
+                    } catch (error) {}
                     return data;
                 },
                 set: async (data: any) => {
@@ -86,11 +81,8 @@ const useDatabaseAuthState = async () => {
                         for (const id in data[category]) {
                             const value = data[category][id];
                             const key = `${category}-${id}`;
-                            if (value) {
-                                tasks.push(writeData(value, key));
-                            } else {
-                                tasks.push(removeData(key));
-                            }
+                            if (value) tasks.push(writeData(value, key));
+                            else tasks.push(removeData(key));
                         }
                     }
                     await Promise.all(tasks);
@@ -102,13 +94,12 @@ const useDatabaseAuthState = async () => {
 };
 
 export const initWhatsApp = async () => {
-    console.log(`🚀 [WhatsApp] Iniciando sesión (Modo DB Optimizado)...`);
+    console.log(`🚀 [WhatsApp] Iniciando motor de sesión persistente...`);
     currentStatus = 'connecting';
     
     const { state, saveCreds } = await useDatabaseAuthState();
 
     const connectToWhatsApp = () => {
-        // MEJORA: Limpiar listeners previos si existen para evitar duplicados
         if (clientSocket) {
             clientSocket.ev.removeAllListeners('connection.update');
             clientSocket.ev.removeAllListeners('creds.update');
@@ -119,9 +110,7 @@ export const initWhatsApp = async () => {
             printQRInTerminal: false,
             browser: Browsers.macOS('Desktop'),
             syncFullHistory: false,
-            // MEJora: Tiempos de espera para mayor estabilidad
             connectTimeoutMs: 60000,
-            defaultQueryTimeoutMs: 0,
         });
 
         clientSocket = sock;
@@ -133,38 +122,35 @@ export const initWhatsApp = async () => {
             if (qr) {
                 currentStatus = 'qr';
                 currentQR = qr;
-                console.log('✨ [WhatsApp] QR NUEVO generado.');
+                // Generamos el link automáticamente para el Dashboard
+                qrLink = `https://api.qrserver.com/v1/create-qr-code/?size=400x400&data=${encodeURIComponent(qr)}`;
+                console.log('✨ [WhatsApp] QR generado. Si no lo ves en el Dashboard, usa el link de la consola.');
                 qrcode.generate(qr, { small: true });
             }
             
-            if (connection === 'connecting') {
-                currentStatus = 'connecting';
-            }
+            if (connection === 'connecting') currentStatus = 'connecting';
 
             if (connection === 'close') {
                 currentQR = null;
+                qrLink = null;
                 isReady = false;
                 const statusCode = (lastDisconnect?.error as any)?.output?.statusCode;
                 const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
                 
-                console.log(`❌ [WhatsApp] Conexión cerrada. Motivo: ${statusCode}. Reconectando: ${shouldReconnect}`);
-                
                 if (shouldReconnect) {
                     currentStatus = 'connecting';
-                    setTimeout(() => connectToWhatsApp(), 5000); // Pequeño delay para no saturar
+                    setTimeout(() => connectToWhatsApp(), 5000);
                 } else {
                     currentStatus = 'disconnected';
-                    console.log('🛑 [WhatsApp] Sesión cerrada. Limpiando DB...');
-                    try {
-                        const db = getDb(process.env.DATABASE_URL!);
-                        await db.delete(wa_sessions);
-                    } catch (e) {}
+                    const db = getDb(process.env.DATABASE_URL!);
+                    await db.delete(wa_sessions);
                 }
             } else if (connection === 'open') {
                 currentStatus = 'connected';
                 currentQR = null;
+                qrLink = null;
                 isReady = true;
-                console.log('✅ [WhatsApp] ¡BOT CONECTADO Y BLINDADO!');
+                console.log('✅ [WhatsApp] Sesión recuperada y conectada correctamente.');
             }
         });
     };
@@ -174,16 +160,11 @@ export const initWhatsApp = async () => {
 
 export const sendWhatsAppMessage = async (to: string, message: string) => {
     try {
-        if (!clientSocket || !isReady) {
-            console.log('⚠️ [WhatsApp] Bot no listo.');
-            return false;
-        }
-        const cleanNumber = to.replace(/\D/g, '');
-        const jid = `${cleanNumber}@s.whatsapp.net`;
+        if (!clientSocket || !isReady) return false;
+        const jid = `${to.replace(/\D/g, '')}@s.whatsapp.net`;
         await clientSocket.sendMessage(jid, { text: message });
         return true;
-    } catch (error: any) {
-        console.error(`💥 [WhatsApp] Fallo:`, error.message);
+    } catch (error) {
         return false;
     }
 };
