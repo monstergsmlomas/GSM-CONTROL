@@ -10,8 +10,7 @@ import express from "express";
 import cors from "cors";
 import { getDb } from "./db.js";
 import { users, audit_logs, settings, bot_settings } from "./schema.js";
-import { eq, desc, sql } from "drizzle-orm";
-// 1. CORRECCIÓN: Agregamos getBotStatus a la importación
+import { eq, desc, sql, gt, inArray } from "drizzle-orm";
 import { initWhatsApp, sendWhatsAppMessage, getBotStatus } from "./bot.js";
 import { startCronJobs } from "./cron.js";
 
@@ -24,158 +23,100 @@ app.use(cors({
 }));
 app.use(express.json());
 
-// Middlewares
-app.use((req, res, next) => {
-    if (!req.path.startsWith('/api')) return next();
-    next();
-});
+// --- ⚡ OPTIMIZACIÓN: BUFFER DE PINGS EN MEMORIA ---
+const pingBuffer = new Set<string>();
 
-// --- NUEVA RUTA: DISPARAR REPORTE SEMANAL MANUALMENTE ---
+setInterval(async () => {
+    if (pingBuffer.size === 0) return;
+
+    const emailsToUpdate = Array.from(pingBuffer);
+    pingBuffer.clear();
+
+    try {
+        const db = getDb(process.env.DATABASE_URL!);
+        console.log(`[Ping System] Actualizando lastSeen para ${emailsToUpdate.length} usuarios...`);
+        
+        await db.update(users)
+            .set({ lastSeen: new Date() })
+            .where(inArray(users.email, emailsToUpdate));
+            
+    } catch (error: any) {
+        console.error("❌ [Ping System] Error en actualización masiva:", error.message);
+    }
+}, 60000);
+
+// --- 1. ADMINISTRACIÓN Y REPORTES ---
 app.get("/api/admin/force-report", async (req, res) => {
     try {
         console.log("🚀 [Admin] Disparando reporte semanal manualmente...");
         const { runWeeklyReport } = await import('./cron.js');
         await runWeeklyReport();
-        res.json({ 
-            success: true, 
-            message: "Reporte enviado correctamente a Rodrigo y Tomy." 
-        });
+        res.json({ success: true, message: "Reporte enviado correctamente." });
     } catch (error: any) {
-        console.error("❌ Error en force-report:", error.message);
         res.status(500).json({ success: false, error: error.message });
     }
 });
 
-// GET /api/health
-app.get("/api/health", (req, res) => {
-    res.json({ status: "ok", time: new Date().toISOString() });
-});
-
-// GET /api/logs
-app.get("/api/logs", async (req, res) => {
-    try {
-        const dbUrl = (req.headers['x-db-url'] as string) || process.env.DATABASE_URL;
-        if (!dbUrl) return res.json([]);
-        const db = getDb(dbUrl);
-        const logs = await db.select().from(audit_logs).orderBy(desc(audit_logs.fecha));
-        return res.json(logs);
-    } catch (error: any) {
-        console.error("Non-fatal error fetching logs:", error.message);
-        return res.json([]);
-    }
-});
-
-// POST /api/logs
-app.post("/api/logs", async (req, res) => {
-    try {
-        const { accion, responsable, detalle, monto } = req.body;
-        const dbUrl = (req.headers['x-db-url'] as string) || process.env.DATABASE_URL;
-        if (!dbUrl) throw new Error("DATABASE_URL not configured");
-        const db = getDb(dbUrl);
-        await db.insert(audit_logs).values({
-            accion,
-            responsable: responsable || "Sistema",
-            detalle,
-            monto: monto || 0,
-            fecha: new Date()
-        });
-        res.status(201).json({ success: true });
-    } catch (error: any) {
-        res.status(200).json({ success: false, error: "Logging failed" });
-    }
-});
-
-// GET /api/metrics
-app.get("/api/metrics", async (req, res) => {
-    try {
-        const dbUrl = (req.headers['x-db-url'] as string) || process.env.DATABASE_URL;
-        if (!dbUrl) throw new Error("DATABASE_URL not configured");
-        const db = getDb(dbUrl);
-        let allUsers;
-        try {
-            allUsers = await db.select().from(users);
-        } catch (e) {
-            const rawRes = await db.execute(sql.raw(`SELECT * FROM public.users`));
-            allUsers = rawRes.rows;
-        }
-        const total = allUsers.length;
-        const active = allUsers.filter((u: any) => u.subscriptionStatus === 'active' || u.subscription_status === 'active').length;
-        const trialing = allUsers.filter((u: any) => u.subscriptionStatus === 'trialing' || u.subscription_status === 'trialing').length;
-        res.json({ total, active, trialing });
-    } catch (error: any) {
-        res.json({ total: 0, active: 0, trialing: 0 });
-    }
-});
-
-// --- NUEVAS RUTAS: CONFIGURACIÓN Y ESTADO DEL BOT ---
-
-// GET /api/bot-settings
-app.get("/api/bot-settings", async (req, res) => {
-    try {
-        const dbUrl = (req.headers['x-db-url'] as string) || process.env.DATABASE_URL;
-        if (!dbUrl) throw new Error("DATABASE_URL not configured");
-        const db = getDb(dbUrl);
-        const config = await db.select().from(bot_settings).limit(1);
-        if (config.length > 0) {
-            res.json(config[0]);
-        } else {
-            res.json({ isEnabled: false, welcomeMessage: "", reminderMessage: "", trialEndedMessage: "" });
-        }
-    } catch (error: any) {
-        res.status(500).json({ error: error.message });
-    }
-});
-
-// POST /api/bot-settings
-app.post("/api/bot-settings", async (req, res) => {
-    try {
-        const dbUrl = (req.headers['x-db-url'] as string) || process.env.DATABASE_URL;
-        if (!dbUrl) throw new Error("DATABASE_URL not configured");
-        const db = getDb(dbUrl);
-        const body = req.body;
-        
-        const existing = await db.select().from(bot_settings).limit(1);
-        if (existing.length > 0) {
-            await db.update(bot_settings).set(body).where(eq(bot_settings.id, existing[0].id));
-        } else {
-            await db.insert(bot_settings).values(body);
-        }
-        res.json({ success: true });
-    } catch (error: any) {
-        res.status(500).json({ error: error.message });
-    }
-});
-
-// 2. CORRECCIÓN: Nueva ruta para que el Dashboard lea el estado del bot
-// GET /api/bot-status
+// --- 2. CONFIGURACIÓN Y ESTADO DEL BOT ---
 app.get("/api/bot-status", (req, res) => {
     res.json(getBotStatus());
 });
 
-// -------------------------------------------
+app.get("/api/bot-settings", async (req, res) => {
+    try {
+        const db = getDb(process.env.DATABASE_URL!);
+        const config = await db.select().from(bot_settings).limit(1);
+        if (config.length > 0) res.json(config[0]);
+        else res.json({ isEnabled: true, welcomeMessage: "", reminderMessage: "", trialEndedMessage: "" });
+    } catch (error: any) { res.status(500).json({ error: error.message }); }
+});
 
-// GET /api/users
+app.post("/api/bot-settings", async (req, res) => {
+    try {
+        const db = getDb(process.env.DATABASE_URL!);
+        const body = req.body;
+        await db.insert(bot_settings)
+            .values({ ...body, updatedAt: new Date() })
+            .onConflictDoUpdate({
+                target: bot_settings.id,
+                set: { ...body, updatedAt: new Date() }
+            });
+        res.json({ success: true });
+    } catch (error: any) { res.status(500).json({ error: "Error al guardar configuración." }); }
+});
+
+// --- 3. USUARIOS Y CONTADOR DE ACTIVOS ---
+app.get("/api/users/active-count", async (req, res) => {
+    try {
+        const db = getDb(process.env.DATABASE_URL!);
+        const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
+        
+        const result = await db.select({ count: sql<number>`count(*)` })
+            .from(users)
+            .where(gt(users.lastSeen, fiveMinutesAgo));
+            
+        res.json({ count: Math.max(Number(result[0].count), 1) });
+    } catch (error) { res.json({ count: 1 }); }
+});
+
+app.post("/api/users/ping", async (req, res) => {
+    const { email } = req.body;
+    if (!email) return res.status(400).json({ success: false });
+    pingBuffer.add(email);
+    res.json({ success: true, buffered: true });
+});
+
+// --- 4. GESTIÓN DE USUARIOS ---
 app.get("/api/users", async (req, res) => {
     try {
-        const dbUrl = (req.headers['x-db-url'] as string) || process.env.DATABASE_URL;
-        if (!dbUrl) throw new Error("DATABASE_URL not configured");
-        const db = getDb(dbUrl);
-        const allWithSettings = await db.select({
-            user: users,
-            setting: settings
-        })
-        .from(users)
-        .leftJoin(settings, sql`${users.id}::text = ${settings.userId}`)
-        .orderBy(desc(users.updatedAt));
+        const db = getDb(process.env.DATABASE_URL!);
+        const allWithSettings = await db.select({ user: users, setting: settings })
+            .from(users)
+            .leftJoin(settings, sql`${users.id}::text = ${settings.userId}`)
+            .orderBy(desc(users.updatedAt));
 
         const mappedUsers = allWithSettings.map(({ user: u, setting: s }) => {
             if (!u) return null;
-            const planRaw = (u.plan || 'Estandar').toLowerCase();
-            let planMapped = 'Estandar';
-            if (planRaw.includes('premium')) planMapped = 'Premium AI';
-            else if (planRaw.includes('multi')) planMapped = 'Multisede';
-            else if (planRaw.includes('free')) planMapped = 'Free';
-
             return {
                 id: u.id,
                 email: u.email,
@@ -183,7 +124,7 @@ app.get("/api/users", async (req, res) => {
                 fechaAlta: u.trialEndsAt ? new Date(u.trialEndsAt).toISOString() : new Date().toISOString(),
                 trialEndsAt: u.trialEndsAt ? new Date(u.trialEndsAt).toISOString() : null,
                 subscriptionStatus: String(u.subscriptionStatus || 'expired').toLowerCase(),
-                plan: planMapped,
+                plan: u.plan || 'Estandar',
                 cicloDePago: u.cicloDePago || 'mensual',
                 sucursalesExtra: Number(u.sucursalesExtra || 0),
                 currentPeriodEnd: u.currentPeriodEnd ? new Date(u.currentPeriodEnd).toISOString() : null,
@@ -192,71 +133,24 @@ app.get("/api/users", async (req, res) => {
             };
         }).filter(Boolean);
         res.json(mappedUsers);
-    } catch (error: any) {
-        res.json([]);
-    }
+    } catch (error: any) { res.json([]); }
 });
 
-// PATCH /api/users/:id
 app.patch("/api/users/:id", async (req, res) => {
     try {
         const { id } = req.params;
-        let { subscriptionStatus, trialEndsAt, responsable, ciclo_de_pago, sucursales_extra, currentPeriodEnd, telefono, plan } = req.body;
-        const dbUrl = (req.headers['x-db-url'] as string) || process.env.DATABASE_URL;
-        const db = getDb(dbUrl);
+        let { subscriptionStatus, trialEndsAt, currentPeriodEnd, telefono, plan, ciclo_de_pago, sucursales_extra } = req.body;
+        const db = getDb(process.env.DATABASE_URL!);
 
-        const now = new Date();
-        now.setHours(0, 0, 0, 0);
-
-        // --- 🧹 LIMPIEZA OBLIGATORIA DEL FANTASMA ---
-        // Si el plan no es Free, aniquilamos la fecha de Trial para que no interfiera jamás
-        if (plan && plan !== 'Free') {
-            trialEndsAt = null;
-        }
-
-        // --- 🚀 LÓGICA INTELIGENTE DE CAMBIO A PLAN PAGO ---
-        if (plan !== 'Free' && subscriptionStatus === 'active' && !currentPeriodEnd) {
-            const nuevaFecha = new Date();
-            if (ciclo_de_pago === 'anual') {
-                nuevaFecha.setFullYear(nuevaFecha.getFullYear() + 1);
-            } else if (ciclo_de_pago === 'semestral') {
-                nuevaFecha.setMonth(nuevaFecha.getMonth() + 6);
-            } else {
-                nuevaFecha.setMonth(nuevaFecha.getMonth() + 1); 
-            }
-            currentPeriodEnd = nuevaFecha.toISOString();
-            console.log(`✅ Upgrade detectado para usuario ${id}: Nueva fecha de corte -> ${currentPeriodEnd}`);
-        }
-
-        // --- LÓGICA DE AUTO-EXPIRACIÓN ---
-        let dateToCheck = null;
-        if (plan === 'Free' || subscriptionStatus === 'trialing') {
-            dateToCheck = trialEndsAt;
-        } else {
-            dateToCheck = currentPeriodEnd; // Exclusivamente mira la suscripción
-        }
-
-        if (dateToCheck && (subscriptionStatus === 'active' || subscriptionStatus === 'trialing')) {
-            const limitDate = new Date(dateToCheck);
-            limitDate.setHours(0, 0, 0, 0);
-            if (limitDate < now) {
-                console.log(`⚠️ Auto-expirando usuario ${id} por fecha vencida al guardar.`);
-                subscriptionStatus = 'expired';
-            }
-        }
-        // ---------------------------------
+        if (plan && plan !== 'Free') trialEndsAt = null;
 
         const updateData: any = { updatedAt: new Date() };
-        
         if (subscriptionStatus) updateData.subscriptionStatus = subscriptionStatus;
-        
-        // Guardamos las fechas. Si trialEndsAt es null, lo borra en la base de datos.
         updateData.trialEndsAt = trialEndsAt ? new Date(trialEndsAt) : null;
         updateData.currentPeriodEnd = currentPeriodEnd ? new Date(currentPeriodEnd) : null;
-        
+        if (plan) updateData.plan = plan;
         if (ciclo_de_pago) updateData.cicloDePago = ciclo_de_pago;
         if (sucursales_extra !== undefined) updateData.sucursalesExtra = sucursales_extra;
-        if (plan) updateData.plan = plan;
 
         await db.update(users).set(updateData).where(eq(users.id, id));
 
@@ -265,45 +159,36 @@ app.patch("/api/users/:id", async (req, res) => {
              if (existing) await db.update(settings).set({ phone: telefono }).where(eq(settings.userId, id));
              else await db.insert(settings).values({ userId: id, phone: telefono });
         }
-        res.json({ success: true, newStatus: subscriptionStatus });
-    } catch (error: any) {
-        res.status(400).json({ error: error.message });
-    }
-});
-
-// DELETE /api/users/:id
-app.delete("/api/users/:id", async (req, res) => {
-    try {
-        const { id } = req.params;
-        const dbUrl = (req.headers['x-db-url'] as string) || process.env.DATABASE_URL;
-        const db = getDb(dbUrl);
-        await db.delete(users).where(eq(users.id, id));
         res.json({ success: true });
-    } catch (error: any) {
-        res.status(400).json({ error: error.message });
-    }
+    } catch (error: any) { res.status(400).json({ error: error.message }); }
 });
 
-// PING / Last Seen
-app.post("/api/users/ping", async (req, res) => {
+// --- 5. LOGS Y MÉTRICAS ---
+app.get("/api/logs", async (req, res) => {
     try {
         const db = getDb(process.env.DATABASE_URL!);
-        const { email } = req.body;
-        await db.update(users).set({ lastSeen: new Date() }).where(eq(users.email, email));
-        res.json({ success: true });
-    } catch (error: any) {
-        res.status(500).json({ error: error.message });
-    }
+        const logs = await db.select().from(audit_logs).orderBy(desc(audit_logs.fecha)).limit(100);
+        res.json(logs);
+    } catch (error) { res.json([]); }
 });
 
-// Statics & Frontend Routing
-const distPath = path.join(process.cwd(), 'dist');
-app.use(express.static(distPath));
+app.get("/api/metrics", async (req, res) => {
+    try {
+        const db = getDb(process.env.DATABASE_URL!);
+        const all = await db.select().from(users);
+        res.json({
+            total: all.length,
+            active: all.filter((u: any) => u.subscriptionStatus === 'active').length,
+            trialing: all.filter((u: any) => u.subscriptionStatus === 'trialing').length
+        });
+    } catch (error) { res.json({ total: 0, active: 0, trialing: 0 }); }
+});
+
+app.use(express.static(path.join(process.cwd(), 'dist')));
 app.get(/^(?!\/api).*/, (req, res) => {
-    res.sendFile(path.join(distPath, 'index.html'));
+    res.sendFile(path.join(process.cwd(), 'dist', 'index.html'));
 });
 
-// Start engine
 const PORT = Number(process.env.PORT) || 5000;
 app.listen(PORT, '0.0.0.0', async () => {
     console.log(`✅ Servidor GSM-CONTROL en puerto ${PORT}`);

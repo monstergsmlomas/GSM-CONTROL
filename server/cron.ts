@@ -4,19 +4,16 @@ import { users, settings, bot_settings } from './schema.js';
 import { eq, sql, and, isNotNull, or, lt, ne } from 'drizzle-orm';
 import { sendWhatsAppMessage } from './bot.js';
 
-// Configuración de destinatarios del reporte
 const ADMIN_PHONES = ['5491138057772', '5491124949533'];
 
 export const startCronJobs = () => {
-    console.log("⏰ [Cron] Configurando automatizaciones (Diaria 10:00 AM | Reporte Lunes 09:00 AM)...");
+    console.log("⏰ [Cron] Automatizaciones listas: Diaria (10:00 AM) | Reporte (Lunes 09:00 AM)");
 
-    // 1. Revisión diaria de vencimientos (10:00 AM)
     cron.schedule('0 10 * * *', async () => {
         console.log("🔍 [Cron] Iniciando revisión diaria de suscripciones...");
         await runBatchAutomation();
     });
 
-    // 2. Reporte Semanal para Socios (Lunes 09:00 AM)
     cron.schedule('0 9 * * 1', async () => {
         console.log("📊 [Cron] Generando reporte semanal de métricas...");
         await runWeeklyReport();
@@ -32,12 +29,12 @@ export const runWeeklyReport = async () => {
         const trialing = allUsers.filter((u: any) => u.subscriptionStatus === 'trialing').length;
         const expired = allUsers.filter((u: any) => u.subscriptionStatus === 'expired').length;
 
-        // --- LÓGICA DE MRR ---
         let mrr = 0;
         active.forEach((user: any) => {
             let baseMensual = 0;
-            const sucursales = user.sucursales_extra || user.sucursalesExtra || 0; 
-            const ciclo = user.ciclo_de_pago || user.cicloDePago || 'mensual';
+            // MEJORA: Asegurar que siempre haya un valor numérico para evitar NaN
+            const sucursales = Number(user.sucursalesExtra || 0); 
+            const ciclo = user.cicloDePago || 'mensual';
             
             if (user.plan === 'Estandar' || user.plan === 'Multisede') {
                 if (ciclo === 'semestral') baseMensual = 160000 / 6;
@@ -54,18 +51,17 @@ export const runWeeklyReport = async () => {
         }).format(mrr);
 
         const mensaje = `📈 *REPORTE SEMANAL GSM-CONTROL*\n\n` +
-            `💰 *MRR Actual:* ${formattedMRR}\n` +
+            `💰 *MRR Estimado:* ${formattedMRR}\n` +
             `👥 *Estado de Base:*\n` +
             `• Activos: ${active.length}\n` +
             `• En Trial: ${trialing}\n` +
             `• Expirados: ${expired}\n\n` +
-            `🚀 *¡Buena semana de ventas, Rodrigo y Tomy!*`;
+            `🚀 *¡Buena semana de ventas!*`;
 
-        // Envío a ambos números
         for (const phone of ADMIN_PHONES) {
             await sendWhatsAppMessage(phone, mensaje);
         }
-        console.log("✅ [Cron] Reporte semanal enviado a los socios.");
+        console.log("✅ [Cron] Reporte semanal enviado.");
 
     } catch (error: any) {
         console.error("❌ [Cron] Error en reporte semanal:", error.message);
@@ -75,16 +71,14 @@ export const runWeeklyReport = async () => {
 const runBatchAutomation = async () => {
     try {
         const db = getDb();
-        
-        // A. PRIMERO: Expiramos a los que ya vencieron hoy
         await autoExpireUsers(db);
 
-        // B. SEGUNDO: Procesamos notificaciones
         const configRes = await db.select().from(bot_settings).limit(1);
         if (configRes.length === 0 || !configRes[0].isEnabled) {
-            console.log("🛑 [Cron] Automatización cancelada: Bot desactivado.");
+            console.log("🛑 [Cron] Automatización omitida: Bot desactivado.");
             return;
         }
+        
         const config = configRes[0];
         await processAlert48h(db, config);
         await processFinishedTrials(db, config);
@@ -93,12 +87,11 @@ const runBatchAutomation = async () => {
     }
 };
 
-// --- FUNCIÓN CORREGIDA: EXPIRA USUARIOS AUTOMÁTICAMENTE ---
 const autoExpireUsers = async (db: any) => {
     try {
         const now = new Date();
         
-        await db.update(users)
+        const result = await db.update(users)
             .set({ 
                 subscriptionStatus: 'expired',
                 updatedAt: new Date()
@@ -107,13 +100,13 @@ const autoExpireUsers = async (db: any) => {
                 and(
                     ne(users.subscriptionStatus, 'expired'),
                     or(
-                        // 1. Si es un plan PAGO, expira SOLO si la fecha de SUSCRIPCIÓN ya pasó
+                        // Vencimiento de suscripción paga
                         and(
                             ne(users.plan, 'Free'),
                             isNotNull(users.currentPeriodEnd),
                             lt(users.currentPeriodEnd, now)
                         ),
-                        // 2. Si es plan FREE, expira SOLO si la fecha del TRIAL ya pasó
+                        // Vencimiento de Trial
                         and(
                             eq(users.plan, 'Free'),
                             isNotNull(users.trialEndsAt),
@@ -123,73 +116,80 @@ const autoExpireUsers = async (db: any) => {
                 )
             );
             
-        console.log("✅ [Cron] Proceso de auto-expiración completado.");
+        console.log("✅ [Cron] Chequeo de expiraciones finalizado.");
     } catch (e: any) {
         console.error("❌ [Cron] Error en autoExpireUsers:", e.message);
     }
 };
 
-const replaceVariables = (template: string, { nombre, plan, estado }: { nombre: string, plan: string, estado: string }) => {
+const replaceVariables = (template: string, data: any) => {
     return template
-        .replace(/{nombre}/g, nombre)
-        .replace(/{plan}/g, plan)
-        .replace(/{estado}/g, estado);
+        .replace(/{nombre}/g, data.nombre || "")
+        .replace(/{plan}/g, data.plan || "")
+        .replace(/{estado}/g, data.estado || "");
 };
 
 const processAlert48h = async (db: any, config: any) => {
     try {
-        const targetDate = new Date();
-        targetDate.setDate(targetDate.getDate() + 2);
-        const dateStr = targetDate.toISOString().split('T')[0];
+        const today = new Date();
+        const after48h = new Date();
+        after48h.setDate(today.getDate() + 2);
+        
+        // Formato YYYY-MM-DD para la comparación SQL
+        const dateStr = after48h.toISOString().split('T')[0];
 
         const usersToNotify = await db.select({
             id: users.id,
             email: users.email,
             plan: users.plan,
-            status: users.subscriptionStatus,
             phone: settings.phone
         })
         .from(users)
-        .innerJoin(settings, eq(users.email, settings.userId))
-        .where(and(sql`DATE(${users.currentPeriodEnd}) = ${dateStr}`, isNotNull(settings.phone)));
+        .innerJoin(settings, eq(users.id, sql`${settings.userId}::uuid`)) // Corrección de tipos
+        .where(and(
+            sql`DATE(${users.currentPeriodEnd}) = ${dateStr}`,
+            isNotNull(settings.phone),
+            ne(users.subscriptionStatus, 'expired')
+        ));
 
         for (const user of usersToNotify) {
             const nombre = user.email.split('@')[0];
             const message = replaceVariables(config.reminderMessage || "Hola {nombre}, tu plan {plan} vence en 48hs.", {
-                nombre, plan: user.plan || 'Estandar', estado: user.status || 'Activo'
+                nombre, plan: user.plan, estado: "Activo"
             });
             await sendWhatsAppMessage(user.phone, message);
         }
     } catch (e: any) {
-        console.error("❌ Error en processAlert48h:", e.message);
+        console.error("❌ [Cron] Error en alertas 48h:", e.message);
     }
 };
 
 const processFinishedTrials = async (db: any, config: any) => {
     try {
-        const targetDate = new Date();
-        targetDate.setDate(targetDate.getDate() - 1);
-        const dateStr = targetDate.toISOString().split('T')[0];
+        const yesterday = new Date();
+        yesterday.setDate(yesterday.getDate() - 1);
+        const dateStr = yesterday.toISOString().split('T')[0];
 
         const usersToNotify = await db.select({
             id: users.id,
             email: users.email,
-            plan: users.plan,
-            status: users.subscriptionStatus,
             phone: settings.phone
         })
         .from(users)
-        .innerJoin(settings, eq(users.email, settings.userId))
-        .where(and(sql`DATE(${users.trialEndsAt}) = ${dateStr}`, isNotNull(settings.phone)));
+        .innerJoin(settings, eq(users.id, sql`${settings.userId}::uuid`))
+        .where(and(
+            sql`DATE(${users.trialEndsAt}) = ${dateStr}`,
+            isNotNull(settings.phone)
+        ));
 
         for (const user of usersToNotify) {
             const nombre = user.email.split('@')[0];
-            const message = replaceVariables(config.trialEndedMessage || "Tu periodo ha finalizado {nombre}.", {
-                nombre, plan: user.plan || 'Estandar', estado: 'Finalizado'
+            const message = replaceVariables(config.trialEndedMessage || "Hola {nombre}, tu periodo de prueba ha finalizado.", {
+                nombre, plan: "Prueba", estado: "Expirado"
             });
             await sendWhatsAppMessage(user.phone, message);
         }
     } catch (e: any) {
-        console.error("❌ Error en processFinishedTrials:", e.message);
+        console.error("❌ [Cron] Error en alertas Trial:", e.message);
     }
 };
