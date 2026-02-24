@@ -14,7 +14,7 @@ const pool = new Pool({
   ssl: { rejectUnauthorized: false },
 
   // Ajuste para Supabase Pro
-  max: 8,                    // Más margen en Pro
+  max: 8,
   idleTimeoutMillis: 15000,
   connectionTimeoutMillis: 10000,
 });
@@ -23,7 +23,7 @@ pool.on("error", (err) => {
   console.error("❌ [DB Pool Error]:", err.message);
 });
 
-// Test inicial opcional
+// Test inicial de conexión
 (async () => {
   try {
     const client = await pool.connect();
@@ -34,7 +34,13 @@ pool.on("error", (err) => {
   }
 })();
 
-export const db = drizzle(pool, {
+const drizzleInstance = drizzle(pool, {
   schema,
   logger: process.env.NODE_ENV !== "production",
 });
+
+// ✅ Export moderno
+export const db = drizzleInstance;
+
+// ✅ Export de compatibilidad para archivos antiguos
+export const getDb = () => drizzleInstance;
