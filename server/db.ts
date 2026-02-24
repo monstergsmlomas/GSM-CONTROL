@@ -1,53 +1,40 @@
 import { drizzle } from "drizzle-orm/node-postgres";
-import pg from "pg";
+import { Pool } from "pg";
 import * as schema from "./schema.js";
 import dotenv from "dotenv";
 
 dotenv.config();
 
-const { Pool } = pg;
+if (!process.env.DATABASE_URL) {
+  throw new Error("❌ DATABASE_URL no está definida en el .env");
+}
 
-// Mantenemos el caché para no recrear el pool innecesariamente
-const poolCache = new Map<string, pg.Pool>();
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: { rejectUnauthorized: false },
 
-export const getDb = (connectionString?: string) => {
-  const finalConnectionString = connectionString || process.env.DATABASE_URL;
+  // Ajuste para Supabase Pro
+  max: 8,                    // Más margen en Pro
+  idleTimeoutMillis: 15000,
+  connectionTimeoutMillis: 10000,
+});
 
-  if (!finalConnectionString) {
-    throw new Error("No database connection string provided. Check DATABASE_URL in .env");
+pool.on("error", (err) => {
+  console.error("❌ [DB Pool Error]:", err.message);
+});
+
+// Test inicial opcional
+(async () => {
+  try {
+    const client = await pool.connect();
+    console.log("✅ Conectado correctamente a Supabase (Pro)");
+    client.release();
+  } catch (err: any) {
+    console.error("❌ Error conectando a Supabase:", err.message);
   }
+})();
 
-  if (!poolCache.has(finalConnectionString)) {
-    const host = finalConnectionString.includes('@') 
-      ? finalConnectionString.split('@')[1].split('/')[0] 
-      : 'local/unknown';
-    
-    console.log(`[DB] Iniciando Pool de conexiones para: ${host}`);
-    
-    const pool = new Pool({
-      connectionString: finalConnectionString,
-      ssl: { rejectUnauthorized: false },
-      // MEJORA: Ajuste de límites para Supabase Free/Basic
-      max: 10,              // Máximo de conexiones simultáneas
-      min: 2,               // Mantener al menos 2 conexiones listas para evitar latencia inicial
-      idleTimeoutMillis: 10000, // Cerrar conexiones inactivas más rápido (10s) para liberar espacio
-      connectionTimeoutMillis: 10000, // Dar más margen de conexión si la red está lenta
-    });
-
-    // Manejo de errores globales del pool
-    pool.on('error', (err) => {
-      console.error('❌ [DB Pool Error] Error inesperado en cliente inactivo:', err.message);
-    });
-
-    poolCache.set(finalConnectionString, pool);
-  }
-
-  const pool = poolCache.get(finalConnectionString)!;
-
-  // MEJORA: Retornamos la instancia de Drizzle configurada con el schema
-  // El logger: true te ayudará en desarrollo a ver qué consultas se hacen
-  return drizzle(pool, { 
-    schema, 
-    logger: process.env.NODE_ENV !== 'production' 
-  });
-};
+export const db = drizzle(pool, {
+  schema,
+  logger: process.env.NODE_ENV !== "production",
+});

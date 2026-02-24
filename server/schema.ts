@@ -17,11 +17,25 @@ export const users = pgTable("users", {
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
-// --- 2. CONFIGURACIÓN ---
+// --- 2. CONFIGURACIÓN (RECUPERADA PARA GSM-FIX) ---
 export const settings = pgTable("settings", {
   id: uuid("id").primaryKey().defaultRandom(),
   userId: text("user_id").notNull(),
+  shop_name: text("shop_name"),
+  address: text("address"),
   phone: text("phone"),
+  email: text("email"),
+  whatsapp: text("whatsapp"),
+  landline: text("landline"),
+  logo_url: text("logo_url"),
+  receipt_disclaimer: text("receipt_disclaimer"),
+  card_surcharge: integer("card_surcharge"),
+  transfer_surcharge: integer("transfer_surcharge"),
+  ticket_footer: text("ticket_footer"),
+  checklist_options: text("checklist_options"),
+  print_format: text("print_format"),
+  day_cutoff_hour: integer("day_cutoff_hour"),
+  updatedAt: timestamp("updated_at").defaultNow(),
 });
 
 // --- 3. BOT SETTINGS ---
@@ -34,20 +48,47 @@ export const bot_settings = pgTable("bot_settings", {
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
-// --- 4. AUDIT LOGS (Corregido para index.ts) ---
+// --- 4. AUDIT LOGS ---
 export const audit_logs = pgTable("audit_logs", {
   id: uuid("id").primaryKey().defaultRandom(),
-  fecha: timestamp("fecha").defaultNow(), // Mantenemos "fecha" porque index.ts la usa para ordenar
+  fecha: timestamp("fecha").defaultNow(), 
   accion: text("accion").notNull(),
   detalle: text("detalle").notNull(),
   responsable: text("responsable").notNull().default("Sistema"),
   monto: integer("monto").default(0),
 });
 
-// --- 5. SESIONES DE WHATSAPP ---
-export const wa_sessions = pgTable("wa_sessions", {
-  id: text("id").primaryKey(),
-  data: text("data").notNull(),
+// --- 5. TABLAS DE NEGOCIO (PROTECCIÓN ANTI-BORRADO) ---
+// Estas definiciones evitan que Drizzle borre tus datos de GSM-FIX en Supabase
+export const clients = pgTable("clients", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  name: text("name").notNull(),
+});
+
+export const repair_orders = pgTable("repair_orders", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  clientId: uuid("client_id"),
+  status: text("status"),
+});
+
+export const daily_cash = pgTable("daily_cash", {
+  id: uuid("id").primaryKey().defaultRandom(),
+});
+
+export const devices = pgTable("devices", {
+  id: uuid("id").primaryKey().defaultRandom(),
+});
+
+export const payments = pgTable("payments", {
+  id: uuid("id").primaryKey().defaultRandom(),
+});
+
+export const expenses = pgTable("expenses", {
+  id: uuid("id").primaryKey().defaultRandom(),
+});
+
+export const products = pgTable("products", {
+  id: uuid("id").primaryKey().defaultRandom(),
 });
 
 // --- TIPOS ---
@@ -55,3 +96,5 @@ export type User = typeof users.$inferSelect;
 export type NewUser = typeof users.$inferInsert;
 export type AuditLog = typeof audit_logs.$inferSelect;
 export type NewAuditLog = typeof audit_logs.$inferInsert;
+export type Setting = typeof settings.$inferSelect;
+export type BotSetting = typeof bot_settings.$inferSelect;
