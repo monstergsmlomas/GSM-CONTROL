@@ -36,6 +36,47 @@ app.use(cors({
 app.use(express.json());
 
 /* ================================
+   🔒 RATE LIMIT SIMPLE (ANTI-FLOOD)
+================================ */
+
+const ipRequests = new Map<string, number[]>();
+const emailRequests = new Map<string, number[]>();
+
+const RATE_WINDOW = 60 * 1000; // 1 minuto
+const MAX_REQUESTS_PER_IP = 30;
+const MAX_REQUESTS_PER_EMAIL = 10;
+
+function isRateLimited(map: Map<string, number[]>, key: string, max: number) {
+    const now = Date.now();
+    const windowStart = now - RATE_WINDOW;
+
+    const timestamps = map.get(key)?.filter(ts => ts > windowStart) || [];
+
+    timestamps.push(now);
+    map.set(key, timestamps);
+
+    return timestamps.length > max;
+}
+
+// Limpieza automática cada 5 minutos
+setInterval(() => {
+    const now = Date.now();
+    const windowStart = now - RATE_WINDOW;
+
+    for (const [key, timestamps] of ipRequests) {
+        const filtered = timestamps.filter(ts => ts > windowStart);
+        if (filtered.length === 0) ipRequests.delete(key);
+        else ipRequests.set(key, filtered);
+    }
+
+    for (const [key, timestamps] of emailRequests) {
+        const filtered = timestamps.filter(ts => ts > windowStart);
+        if (filtered.length === 0) emailRequests.delete(key);
+        else emailRequests.set(key, filtered);
+    }
+}, 5 * 60 * 1000);
+
+/* ================================
    ⚡ BUFFER DE PINGS
 ================================ */
 const pingBuffer = new Set<string>();
@@ -72,8 +113,19 @@ app.get("/api/bot-settings", async (req, res) => {
 
 app.post("/api/users/ping", async (req, res) => {
     try {
+
+        const clientIp = req.ip || req.headers["x-forwarded-for"]?.toString() || "unknown";
         const { email } = req.body;
+
         if (!email) return res.status(400).json({ success: false });
+
+        if (isRateLimited(ipRequests, clientIp, MAX_REQUESTS_PER_IP)) {
+            return res.status(429).json({ error: "Too many requests (IP)" });
+        }
+
+        if (isRateLimited(emailRequests, email, MAX_REQUESTS_PER_EMAIL)) {
+            return res.status(429).json({ error: "Too many requests (email)" });
+        }
 
         const db = getDb(process.env.DATABASE_URL!);
         const [existing] = await db.select()
@@ -98,6 +150,7 @@ app.post("/api/users/ping", async (req, res) => {
         }
 
         res.json({ success: true });
+
     } catch (error: any) {
         res.status(500).json({ error: error.message });
     }
@@ -161,7 +214,6 @@ app.patch("/api/users/:id", async (req, res) => {
                             user.email.split('@')[0]
                         );
 
-                        // ⚠️ Enviamos fuera del control transaccional lógico
                         await sendWhatsAppMessage(telefono, msg);
                     }
                 } else {
@@ -213,7 +265,6 @@ app.listen(PORT, '0.0.0.0', async () => {
 
     initWhatsApp();
 
-    // 🔒 Solo una instancia debe tener RUN_CRON=true
     if (process.env.RUN_CRON === "true") {
         startCronJobs();
     } else {
